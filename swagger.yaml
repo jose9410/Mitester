@@ -1,0 +1,355 @@
+openapi: 3.0.3
+info:
+  title: API de Certificación "Mi Tester E2E"
+  description: Contratos REST API para la plataforma de certificación de software bancario impulsada por metadatos.
+  version: 1.1.0
+servers:
+  - url: https://api.mitestere2e.banco.internal/api/v1
+    description: Ambiente de Staging / QA
+
+paths:
+  # =========================================================================
+  # 1. DASHBOARD DE CERTIFICACIÓN
+  # =========================================================================
+  /certification/scorecard:
+    get:
+      summary: Obtiene la métrica consolidada del Scorecard y el estado Go/No-Go
+      description: Retorna el % de conciliación actual, el umbral mínimo exigido, el delta histórico y el badge de estado para la toma de decisiones expeditas.
+      operationId: getScorecard
+      tags:
+        - Dashboard de Certificación
+      parameters:
+        - name: tenant
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "BPP_KTX_SAAS"
+        - name: processId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "Cruce_Tx_Breb"
+      responses:
+        '200':
+          description: Scorecard obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScorecardResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /certification/export-pdf:
+    post:
+      summary: Genera y emite el certificado formal de certificación en PDF
+      description: Genera el documento PDF firmado con la auditoría de reglas de negocio para aprobaciones Go/No-Go.
+      operationId: exportCertificationPdf
+      tags:
+        - Dashboard de Certificación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportPdfRequest'
+      responses:
+        '200':
+          description: Archivo PDF generado exitosamente.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # =========================================================================
+  # 2. MÓDULO DE TRIAGE Y DIAGNÓSTICO
+  # =========================================================================
+  /triage/inconsistencies:
+    get:
+      summary: Obtiene la lista de inconsistencias pre-filtradas
+      description: Retorna los registros con discrepancias ordenados por impacto monetario o componente bancario.
+      operationId: getInconsistencies
+      tags:
+        - Módulo de Triage
+      parameters:
+        - name: executionId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [monetaryImpact, component, executionTime]
+            default: monetaryImpact
+      responses:
+        '200':
+          description: Lista de inconsistencias obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InconsistencyItem'
+
+  /triage/logs/{inconsistencyId}:
+    get:
+      summary: Obtiene el extracto contextual de log para el Drawer UI
+      description: Filtra y retorna la línea exacta de código o query afectada en bases de datos Oracle/SQL Server.
+      operationId: getContextualLog
+      tags:
+        - Módulo de Triage
+      parameters:
+        - name: inconsistencyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Extracto de log obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextualLogResponse'
+
+  /triage/escalate:
+    post:
+      summary: Escala la inconsistencia a Desarrollo (Jira) o Soporte
+      description: Ejecuta el etiquetado inteligente y genera automáticamente el ticket en la plataforma correspondiente.
+      operationId: escalateInconsistency
+      tags:
+        - Módulo de Triage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalateRequest'
+      responses:
+        '200':
+          description: Escalamiento realizado con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalateResponse'
+
+  # =========================================================================
+  # 3. ENGINE DE ORQUESTACIÓN
+  # =========================================================================
+  /orchestration/validate-schema:
+    post:
+      summary: Valida un archivo de suite contra el schema-v1.1.json
+      description: Endpoint utilizado por Angular antes de guardar o ejecutar una suite para verificar la integridad del contrato polimórfico.
+      operationId: validateSchema
+      tags:
+        - Engine de Orquestación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Validación exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+
+  /orchestration/executions/start:
+    post:
+      summary: Inicia la ejecución asíncrona de una suite E2E
+      description: Desencadena el hilo en .NET para procesar el lote masivo de transacciones.
+      operationId: startExecution
+      tags:
+        - Engine de Orquestación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartExecutionRequest'
+      responses:
+        '202':
+          description: Ejecución aceptada en segundo plano.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartExecutionResponse'
+
+# =========================================================================
+# COMPONENTES Y SCHEMAS (DTOs)
+# =========================================================================
+components:
+  schemas:
+    ScorecardResponse:
+      type: object
+      properties:
+        tenant:
+          type: string
+          example: "BPP_KTX_SAAS"
+        processId:
+          type: string
+          example: "Cruce_Tx_Breb"
+        currentVersion:
+          type: string
+          example: "v2.4.1"
+        previousVersion:
+          type: string
+          example: "v2.4.0"
+        consistencyPercentage:
+          type: number
+          format: float
+          example: 98.5
+        acceptanceThreshold:
+          type: number
+          format: float
+          example: 98.0
+        deltaPreviousVersion:
+          type: number
+          format: float
+          example: 0.3
+        statusBadge:
+          type: string
+          enum: [GO, NO_GO, REQUIRES_TRIAGE]
+          example: "GO"
+        totalTransactionsProcessed:
+          type: integer
+          example: 1500000
+
+    ExportPdfRequest:
+      type: object
+      required:
+        - executionId
+        - approvedBy
+      properties:
+        executionId:
+          type: string
+          format: uuid
+        approvedBy:
+          type: string
+          example: "Maria (Analista QA)"
+        comments:
+          type: string
+          example: "Certificación aprobada. Supera el umbral mínimo del 98.0%."
+
+    InconsistencyItem:
+      type: object
+      properties:
+        inconsistencyId:
+          type: string
+          example: "INV-8092"
+        component:
+          type: string
+          example: "Módulo ATH / Préstamos"
+        monetaryImpact:
+          type: number
+          format: double
+          example: 450000.00
+        fieldAffected:
+          type: string
+          example: "Monetary_Value"
+        suggestedTag:
+          type: string
+          enum: ["TAG_SOPORTE", "TAG_DESARROLLO"]
+          example: "TAG_SOPORTE"
+
+    ContextualLogResponse:
+      type: object
+      properties:
+        inconsistencyId:
+          type: string
+          example: "INV-8092"
+        targetCatalog:
+          type: string
+          enum: ["Oracle", "SQL Server"]
+          example: "Oracle"
+        failedQuery:
+          type: string
+          example: "SELECT Monetary_Value FROM DB_ORACLE_LOANS WHERE Tx_Id = '8092'"
+        exactErrorMessage:
+          type: string
+          example: "Campo Monetary_Value nulo en Tabla DB_ORACLE_LOANS."
+        suggestedActionText:
+          type: string
+          example: "Inyección incompleta de datos en esquema de pruebas."
+
+    EscalateRequest:
+      type: object
+      required:
+        - inconsistencyId
+        - targetDestination
+      properties:
+        inconsistencyId:
+          type: string
+          example: "INV-8092"
+        targetDestination:
+          type: string
+          enum: [JIRA_DEVELOPMENT, SUPPORT_QUEUE]
+          example: "SUPPORT_QUEUE"
+        customNotes:
+          type: string
+          example: "Revisar carga de datos inicial en ambiente Staging."
+
+    EscalateResponse:
+      type: object
+      properties:
+        ticketId:
+          type: string
+          example: "JIRA-E2E-401"
+        status:
+          type: string
+          example: "ESCALATED_SUCCESSFULLY"
+
+    ValidationResponse:
+      type: object
+      properties:
+        isValid:
+          type: boolean
+          example: true
+        validationErrors:
+          type: array
+          items:
+            type: string
+
+    StartExecutionRequest:
+      type: object
+      required:
+        - suiteConfigJson
+      properties:
+        suiteConfigJson:
+          type: string
+          description: Contenido JSON de la suite basado en schema-v1.1
+
+    StartExecutionResponse:
+      type: object
+      properties:
+        executionId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "PROCESSING_ASYNC"
+
+  responses:
+    InternalServerError:
+      description: Error interno en el motor de ejecución .NET.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              errorCode:
+                type: string
+                example: "ERR_ORCHESTRATION_ENGINE"
+              message:
+                type: string
+                example: "Fallo durante la ejecución del paso SQL."
+
+```

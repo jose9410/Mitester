@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MiTesterE2E</RootNamespace>
+    <AssemblyName>MiTesterE2E</AssemblyName>
+    <!-- Versión de la API -->
+    <Version>1.1.0</Version>
+    <InformationalVersion>1.1.0-fase1</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Validación de JSON Schema draft-07 con soporte polimórfico allOf/if-then -->
+    <PackageReference Include="NJsonSchema" Version="11.0.0" />
+    <!-- Documentación Swagger / OpenAPI -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <!-- Embebe el schema en el ensamblado para que sea accesible en producción (contenedor) -->
+  <ItemGroup>
+    <EmbeddedResource Include="schema-v1.1.json" />
+  </ItemGroup>
+
+</Project>

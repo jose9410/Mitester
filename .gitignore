@@ -1,0 +1,46 @@
+## Ignore Visual Studio / VS Code / Rider temporary and user files
+.vs/
+.vscode/
+.idea/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+## Build results and compilation output
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## NuGet Packages
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Environment and sensitive files
+*.env
+*.env.*
+appsettings.Local.json
+appsettings.*.local.json
+secrets.json
+*.pfx
+*.cer
+*.key
+*.pem
+
+## OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+## Antigravity / AI IDE temporary artifacts
+.gemini/
+.agents/
+scratch/

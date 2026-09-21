@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Configuración de Ejecución E2E",
+  "type": "object",
+  "required": ["tenant", "environment", "application", "processes"],
+  "properties": {
+    "tenant": {
+      "type": "string",
+      "description": "Identificador del cliente (ej. BPP KTX SAAS)."
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["DEV", "QA_AZURE", "STAGING_ONPREM", "PROD"],
+      "ui:widget": "select"
+    },
+    "environmentRef": {
+      "type": "string",
+      "ui:placeholder": "Ej: kv-bpp-ktx-qa",
+      "description": "Referencia segura al gestor de secretos (Key Vault) para las cadenas de conexión."
+    },
+    "application": {
+      "type": "string",
+      "description": "Módulo bajo certificación (ej. Koncilia, GouPayments)."
+    },
+    "processes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["processId", "context", "steps"],
+        "properties": {
+          "processId": { "type": "string" },
+          "context": {
+            "type": "object",
+            "properties": {
+              "executionDate": { 
+                "type": "string", 
+                "format": "date",
+                "ui:widget": "datepicker" 
+              },
+              "requiredFilePatterns": { 
+                "type": "array", 
+                "items": { "type": "string" },
+                "ui:widget": "tags"
+              }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["stepId", "actionType", "payload"],
+              "properties": {
+                "stepId": { "type": "integer" },
+                "actionType": {
+                  "type": "string",
+                  "ui:widget": "autocomplete",
+                  "description": "Tipo de acción extensible (ej. UI_SEQUENCE, SQL_EXECUTE, FILE_CHECK)."
+                },
+                "timeoutSeconds": { 
+                  "type": "integer", 
+                  "default": 300,
+                  "description": "Tiempo máximo de ejecución antes de abortar el hilo."
+                },
+                "retryCount": { 
+                  "type": "integer", 
+                  "default": 0 
+                },
+                "asyncPolling": {
+                  "type": "object",
+                  "properties": {
+                    "intervalSeconds": { "type": "integer" },
+                    "maxDurationSeconds": { "type": "integer" }
+                  }
+                },
+                "payload": {
+                  "type": "object",
+                  "description": "Contenedor polimórfico adaptado a la acción elegida."
+                }
+              },
+              "allOf": [
+                {
+                  "if": { "properties": { "actionType": { "const": "UI_SEQUENCE" } } },
+                  "then": {
+                    "properties": {
+                      "payload": {
+                        "required": ["uiCommands"],
+                        "properties": {
+                          "uiCommands": { "type": "array", "items": { "type": "object" } }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": { "properties": { "actionType": { "const": "SQL_EXECUTE" } } },
+                  "then": {
+                    "properties": {
+                      "payload": {
+                        "required": ["query", "catalog"],
+                        "properties": {
+                          "catalog": { "type": "string", "enum": ["Oracle", "SQL Server"] },
+                          "query": { "type": "string", "ui:widget": "textarea" },
+                          "useIndexFastFullScan": { "type": "boolean", "default": false }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": { "properties": { "actionType": { "const": "ASSERT_BUSINESS_RULES" } } },
+                  "then": {
+                    "properties": {
+                      "payload": {
+                        "required": ["expectedValue", "operator"],
+                        "properties": {
+                          "expectedValue": { "type": "number" },
+                          "operator": { "type": "string", "enum": [">=", "==", "<="], "ui:widget": "select" }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
