@@ -1,0 +1,431 @@
+@use '../../../styles/tokens' as t;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIAGE DRAWER — Estilos
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Container del sidenav
+.triage-container {
+  height: 100%;
+  background-color: t.$surface-bg;
+}
+
+// ── PANEL PRINCIPAL ───────────────────────────────────────────────────────────
+.triage-main {
+  padding: t.$space-6;
+}
+
+.triage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: t.$space-4;
+  margin-bottom: t.$space-6;
+
+  .page-title {
+    display: flex;
+    align-items: center;
+    gap: t.$space-2;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: t.$primary;
+
+    .page-icon { font-size: 1.75rem; }
+  }
+
+  .page-subtitle {
+    margin-top: t.$space-1;
+    color: t.$text-secondary;
+    font-size: .875rem;
+  }
+}
+
+// Chips de resumen en el header
+.summary-chips {
+  display: flex;
+  gap: t.$space-3;
+  flex-wrap: wrap;
+
+  .summary-chip {
+    display: flex;
+    align-items: center;
+    gap: t.$space-2;
+    padding: t.$space-2 t.$space-4;
+    border-radius: 99px;
+    font-weight: 600;
+    font-size: .875rem;
+
+    mat-icon { font-size: 1rem; }
+  }
+
+  .count-chip {
+    background: t.$nogo-light;
+    color: t.$nogo-color;
+    border: 1px solid t.$nogo-color;
+  }
+
+  .impact-chip {
+    background: t.$go-light;
+    color: t.$go-color;
+    border: 1px solid t.$go-color;
+  }
+}
+
+// Estado de carga
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: t.$space-4;
+  padding: t.$space-12;
+  color: t.$text-secondary;
+}
+
+// ── GRID DE INCONSISTENCIAS ───────────────────────────────────────────────────
+.inconsistency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: t.$space-4;
+}
+
+.inconsistency-card {
+  cursor: pointer;
+  border-left: 4px solid transparent !important;
+  transition: transform t.$transition-normal, box-shadow t.$transition-normal !important;
+
+  &:hover, &:focus {
+    transform: translateY(-3px);
+    box-shadow: t.$shadow-lg !important;
+    outline: 2px solid t.$primary;
+    outline-offset: 2px;
+  }
+
+  &.card-desarrollo { border-left-color: t.$go-color !important; }
+  &.card-soporte    { border-left-color: t.$triage-color !important; }
+
+  mat-card-content { padding: t.$space-4 !important; }
+
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: t.$space-3;
+
+    .inconsistency-id {
+      font-size: .75rem;
+      font-weight: 700;
+      color: t.$primary;
+      background: rgba(t.$primary, .06);
+      padding: 2px 8px;
+      border-radius: t.$radius-sm;
+    }
+
+    .area-chip {
+      font-size: .7rem !important;
+      height: 24px !important;
+      min-height: 24px !important;
+      padding: 0 8px !important;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+
+      mat-icon { font-size: .85rem; }
+    }
+  }
+
+  .card-component {
+    display: flex;
+    align-items: center;
+    gap: t.$space-2;
+    font-weight: 600;
+    color: t.$text-primary;
+    margin-bottom: t.$space-3;
+
+    mat-icon { font-size: 1rem; color: t.$text-secondary; }
+  }
+
+  .card-impact {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: t.$space-2;
+    padding: t.$space-2 t.$space-3;
+    background: t.$surface-bg;
+    border-radius: t.$radius-sm;
+
+    .impact-label { font-size: .75rem; color: t.$text-secondary; }
+    .impact-value {
+      font-weight: 700;
+      font-size: 1rem;
+      color: t.$nogo-color;
+      font-family: t.$font-mono;
+    }
+  }
+
+  .card-field {
+    display: flex;
+    align-items: center;
+    gap: t.$space-2;
+    font-size: .8rem;
+    color: t.$text-secondary;
+    margin-bottom: t.$space-3;
+
+    mat-icon { font-size: .9rem; color: t.$triage-color; }
+    code {
+      background: #F1F5F9;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: t.$font-mono;
+      color: t.$primary;
+    }
+  }
+
+  .card-action {
+    button { width: 100%; font-size: .8rem; }
+  }
+}
+
+// Estado vacío
+.empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: t.$space-3;
+  padding: t.$space-12;
+  text-align: center;
+  color: t.$text-secondary;
+
+  .empty-icon {
+    font-size: 4rem;
+    color: t.$go-color;
+  }
+
+  h3 { font-size: 1.25rem; color: t.$text-primary; }
+}
+
+// ── DRAWER LATERAL ────────────────────────────────────────────────────────────
+.triage-drawer {
+  width: 480px;
+
+  @media (max-width: 600px) { width: 100vw; }
+}
+
+.drawer-content {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+// Header del drawer
+.drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: t.$space-4 t.$space-4 t.$space-3;
+  background: t.$primary;
+  color: white;
+
+  .drawer-title-group {
+    .drawer-id {
+      display: block;
+      font-size: .75rem;
+      color: rgba(white, .7);
+      margin-bottom: t.$space-1;
+    }
+    .drawer-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+  }
+
+  button { color: white; }
+}
+
+// Metadatos rápidos
+.drawer-meta {
+  padding: t.$space-4;
+  display: flex;
+  flex-direction: column;
+  gap: t.$space-3;
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: t.$space-3;
+
+    mat-icon { color: t.$primary; flex-shrink: 0; }
+
+    .meta-label {
+      display: block;
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: t.$text-secondary;
+    }
+
+    .meta-value {
+      display: block;
+      font-weight: 600;
+      font-size: .9rem;
+      color: t.$text-primary;
+
+      &.impact-highlight { color: t.$nogo-color; font-family: t.$font-mono; }
+    }
+  }
+}
+
+// Sección de log
+.log-section {
+  padding: t.$space-4;
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: t.$space-2;
+    font-size: .9rem;
+    font-weight: 700;
+    color: t.$primary;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: t.$space-4;
+  }
+
+  .log-loading {
+    display: flex;
+    align-items: center;
+    gap: t.$space-3;
+    color: t.$text-secondary;
+    font-size: .875rem;
+  }
+
+  .catalog-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: t.$space-2;
+    background: t.$primary;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-size: .75rem;
+    font-weight: 600;
+    margin-bottom: t.$space-3;
+
+    mat-icon { font-size: .9rem; }
+  }
+
+  .log-block {
+    border-radius: t.$radius-sm;
+    margin-bottom: t.$space-3;
+    overflow: hidden;
+
+    .log-block-label {
+      display: flex;
+      align-items: center;
+      gap: t.$space-2;
+      padding: t.$space-2 t.$space-3;
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+
+      mat-icon { font-size: .9rem; }
+    }
+
+    pre {
+      margin: 0;
+      padding: t.$space-3;
+      font-size: .75rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    &.query-block {
+      background: #1E293B;
+
+      .log-block-label { background: #0F172A; color: #94A3B8; }
+      pre { color: #7DD3FC; }
+    }
+
+    &.error-block {
+      background: t.$nogo-light;
+
+      .error-label { background: #FFCDD2; color: t.$nogo-color; }
+      .error-text { color: t.$nogo-color; }
+    }
+  }
+
+  .suggested-action {
+    display: flex;
+    gap: t.$space-3;
+    padding: t.$space-3;
+    background: #FFF9C4;
+    border-radius: t.$radius-sm;
+    border-left: 3px solid #F9A825;
+
+    .action-icon { color: #F9A825; flex-shrink: 0; }
+
+    .action-label {
+      display: block;
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: t.$text-secondary;
+      margin-bottom: t.$space-1;
+    }
+
+    .action-text {
+      font-size: .8rem;
+      color: t.$text-primary;
+      line-height: 1.5;
+    }
+  }
+}
+
+// Sección de escalamiento
+.escalate-section {
+  padding: t.$space-4;
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: t.$space-2;
+    font-size: .9rem;
+    font-weight: 700;
+    color: t.$primary;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: t.$space-4;
+  }
+
+  .notes-field { width: 100%; margin-bottom: t.$space-3; }
+
+  .escalate-actions {
+    display: flex;
+    gap: t.$space-3;
+    flex-wrap: wrap;
+
+    button {
+      flex: 1;
+      min-width: 160px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: t.$space-2;
+    }
+
+    .btn-desarrollo {
+      background-color: t.$go-color !important;
+      color: white !important;
+    }
+
+    .btn-soporte {
+      background-color: t.$triage-color !important;
+      color: white !important;
+    }
+  }
+}

@@ -1,0 +1,163 @@
+<div class="scorecard-container animate-in">
+
+  <!-- ══════════════════════════════════════════════════════════
+       HEADER — Título + Estado de Conexión SignalR
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="scorecard-header">
+    <div class="header-left">
+      <h1 class="page-title">
+        <mat-icon class="page-icon">verified_user</mat-icon>
+        Dashboard de Certificación
+      </h1>
+      @if (scorecard(); as sc) {
+        <p class="page-subtitle">
+          {{ sc.tenant }} · {{ sc.processId }} ·
+          <span class="version-badge">{{ sc.currentVersion }}</span>
+        </p>
+      }
+    </div>
+
+    <!-- Badge de Conexión WebSocket -->
+    <div class="connection-badge" [class]="'conn-' + connectionStatus()">
+      <span class="conn-dot"></span>
+      <span class="conn-label">SignalR: {{ connectionStatus() }}</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       BARRA DE PROGRESO ASÍNCRONA (SignalR en tiempo real)
+  ═══════════════════════════════════════════════════════════ -->
+  @if (isRunning()) {
+    <mat-card class="progress-card animate-in">
+      <mat-card-content>
+        <div class="progress-header">
+          <span class="progress-step pulse">
+            <mat-icon>sync</mat-icon>
+            {{ activeStep() }}
+          </span>
+          <span class="progress-pct">{{ progressLabel() }}</span>
+        </div>
+        <mat-progress-bar
+          mode="determinate"
+          [value]="progressValue()"
+          aria-label="Progreso de ejecución E2E"
+        ></mat-progress-bar>
+        <p class="progress-hint">
+          Ejecución en curso — ID: {{ executionId() }}
+        </p>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  <!-- ══════════════════════════════════════════════════════════
+       GRID DE MÉTRICAS PRINCIPALES
+  ═══════════════════════════════════════════════════════════ -->
+  @if (isLoading()) {
+    <div class="loading-grid">
+      @for (i of [1,2,3,4]; track i) {
+        <mat-card class="skeleton-card">
+          <div class="skeleton-line wide"></div>
+          <div class="skeleton-line narrow"></div>
+        </mat-card>
+      }
+    </div>
+  } @else {
+    @if (scorecard(); as sc) {
+      <div class="metrics-grid">
+
+        <!-- MÉTRICA 1: % Consistencia (card principal) -->
+        <mat-card class="metric-card metric-main" [class.above-threshold]="isAboveThreshold()">
+          <mat-card-content>
+            <div class="metric-label">% de Conciliación</div>
+            <div class="metric-value consistency-value">
+              {{ sc.consistencyPercentage | number:'1.1-2' }}%
+            </div>
+            <div class="metric-threshold">
+              Umbral mínimo: {{ sc.acceptanceThreshold }}%
+            </div>
+            <div class="threshold-bar">
+              <div
+                class="threshold-fill"
+                [style.width.%]="sc.consistencyPercentage"
+                [class.fill-go]="isAboveThreshold()"
+                [class.fill-nogo]="!isAboveThreshold()"
+              ></div>
+              <div
+                class="threshold-marker"
+                [style.left.%]="threshold()"
+                [matTooltip]="'Umbral mínimo: ' + threshold() + '%'"
+              ></div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- MÉTRICA 2: Badge Go/No-Go -->
+        <mat-card class="metric-card badge-card">
+          <mat-card-content>
+            <div class="metric-label">Decisión de Certificación</div>
+            <div class="status-badge-container">
+              <div
+                class="status-badge"
+                [ngClass]="badgeClass()"
+                [attr.aria-label]="'Estado: ' + statusBadge()"
+              >
+                <mat-icon class="badge-icon">{{ badgeIcon() }}</mat-icon>
+                <span class="badge-text">{{ getBadgeLabel(statusBadge()) }}</span>
+              </div>
+            </div>
+            <p class="badge-hint">
+              @if (statusBadge() === 'GO') {
+                Supera el umbral mínimo exigido. Aprobado para producción.
+              } @else if (statusBadge() === 'NO_GO') {
+                No alcanza el umbral. Se requiere análisis en Triage.
+              } @else {
+                Revisión manual requerida antes de liberar.
+              }
+            </p>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- MÉTRICA 3: Delta histórico -->
+        <mat-card class="metric-card">
+          <mat-card-content>
+            <div class="metric-label">Delta vs Versión Anterior</div>
+            <div class="metric-value" [ngClass]="deltaClass()">
+              {{ deltaLabel() }}
+            </div>
+            <div class="version-comparison">
+              <span class="version-tag">{{ sc.previousVersion }}</span>
+              <mat-icon>arrow_forward</mat-icon>
+              <span class="version-tag current">{{ sc.currentVersion }}</span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- MÉTRICA 4: Total de transacciones -->
+        <mat-card class="metric-card">
+          <mat-card-content>
+            <div class="metric-label">Transacciones Procesadas</div>
+            <div class="metric-value tx-value">
+              {{ totalTxFormatted() }}
+            </div>
+            <div class="metric-sub">
+              <mat-icon class="sub-icon">receipt_long</mat-icon>
+              Lote de certificación completo
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+      </div>
+    } @else if (error()) {
+      <mat-card class="error-card">
+        <mat-card-content>
+          <mat-icon class="error-icon">error_outline</mat-icon>
+          <p>{{ error() }}</p>
+          <button mat-raised-button color="primary" (click)="loadScorecard()">
+            <mat-icon>refresh</mat-icon> Reintentar
+          </button>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+
+</div>

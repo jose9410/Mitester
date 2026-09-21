@@ -60,12 +60,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "Mi Tester E2E v1.1.0");
-        options.RoutePrefix = string.Empty; // Swagger en la raíz "/"
+        options.RoutePrefix = "swagger"; // Swagger disponible en /swagger
     });
 }
 
 app.UseHttpsRedirection();
 app.UseCors("AngularFrontend");
+
+// Servir la SPA de Angular (artefactos compilados en wwwroot)
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseAuthorization();
 
 // Rutas de controladores REST bajo el prefijo /api
@@ -73,5 +78,8 @@ app.MapControllers();
 
 // Ruta del Hub de SignalR (el frontend Angular se conectará a esta URL)
 app.MapHub<TelemetryHub>("/hubs/telemetry");
+
+// Fallback para el enrutamiento del lado del cliente de Angular (SPA)
+app.MapFallbackToFile("index.html");
 
 app.Run();

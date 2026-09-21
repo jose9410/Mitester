@@ -23,4 +23,10 @@
     <EmbeddedResource Include="schema-v1.1.json" />
   </ItemGroup>
 
+  <!-- Excluir ClientApp/node_modules y dist del análisis del SDK de .NET -->
+  <ItemGroup>
+    <Content Remove="ClientApp\**" />
+    <None Remove="ClientApp\**" />
+  </ItemGroup>
+
 </Project>

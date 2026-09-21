@@ -1,52 +1,80 @@
-# Mi Tester E2E (AutoTest E2E) — Backend Core
+# Mi Tester E2E (AutoTest E2E) — Full Stack Platform
 
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-Web_API-512BD4?style=flat&logo=dotnet)](https://learn.microsoft.com/aspnet/core)
+[![Angular 18+](https://img.shields.io/badge/Angular-18%2F19_Standalone-DD0031?style=flat&logo=angular&logoColor=white)](https://angular.dev/)
+[![Material 3](https://img.shields.io/badge/Material_Design-M3_Tokens-757575?style=flat&logo=materialdesign&logoColor=white)](https://material.angular.io/)
 [![SignalR](https://img.shields.io/badge/SignalR-Real--Time_Telemetry-0078D4?style=flat&logo=azure-devops)](https://learn.microsoft.com/aspnet/core/signalr)
 [![Docker](https://img.shields.io/badge/Docker-ACA_Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Repository](https://img.shields.io/badge/GitHub-jose9410%2FMitester-181717?style=flat&logo=github)](https://github.com/jose9410/Mitester)
 
-Núcleo Backend para la plataforma centralizada **"Mi Tester E2E"**, orientada a entornos de certificación de calidad en sistemas bancarios críticos (por ejemplo, conciliaciones masivas de hasta 1,500,000 transacciones).
-
-Estructurado bajo un **Monolito Modular simplificado en .NET 8**, optimizado para ejecutarse en un único contenedor en **Azure Container Apps (ACA)** sin dependencias obligatorias de brokers externos en esta fase.
+Plataforma unificada para la orquestación, certificación y triaje de pruebas End-to-End en sistemas bancarios críticos (conciliaciones masivas de hasta 1,500,000 transacciones).
 
 ---
 
-## 🏛️ Arquitectura del Sistema (Fase 1)
-
-El backend desacopla la recepción HTTP de alta densidad del procesamiento masivo utilizando estructuras en memoria nativas y de alto rendimiento:
+## 🏛️ Arquitectura Global del Sistema
 
 ```
-[Cliente Angular / REST] ─── HTTP POST ───> [OrchestrationController]
-                                                       │
-                                            (Validación JSON Schema)
-                                            (NJsonSchema + Draft-07)
-                                                       │
-                                                       ▼
-                                            [IExecutionTaskQueue]
-                                            (System.Threading.Channels)
-                                                       │
-                                                       ▼
-                                           [ExecutionBackgroundWorker]
-                                              (BackgroundService)
-                                                       │
-                                          (Progreso y Finalización)
-                                                       │
-                                                       ▼
-[Cliente Angular / WS]   <── WebSockets ─── [TelemetryHub (SignalR)]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           FRONTEND (Angular 18+)                           │
+│                                                                             │
+│  ┌───────────────────────┐  ┌─────────────────────┐  ┌───────────────────┐  │
+│  │ Dashboard Scorecard   │  │ Triage Drawer (M3)  │  │ Dynamic Form Gen  │  │
+│  │ (Signals + Threshold) │  │ (Log Extract / Diff)│  │ (schema-v1.1)     │  │
+│  └──────────┬────────────┘  └──────────┬──────────┘  └─────────┬─────────┘  │
+│             │                          │                       │            │
+│             └──────────────────────────┼───────────────────────┘            │
+│                                        ▼                                    │
+│                           [TelemetryService (Signals)]                      │
+└────────────────────────────────────────┬────────────────────────────────────┘
+                                         │ HTTP REST & SignalR WS
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           BACKEND (.NET 8 Web API)                          │
+│                                                                             │
+│  ┌───────────────────────────────┐     ┌─────────────────────────────────┐  │
+│  │ OrchestrationController       │     │ TelemetryHub (SignalR)          │  │
+│  │ (POST /validate-schema,       │     │ (ExecutionProgressUpdated,      │  │
+│  │  POST /executions/start)      │     │  ExecutionCompletedToast)       │  │
+│  └──────────────┬────────────────┘     └────────────────▲────────────────┘  │
+│                 │                                       │                   │
+│                 ▼                                       │                   │
+│  ┌───────────────────────────────┐                      │                   │
+│  │ IExecutionTaskQueue (Channel) │                      │                   │
+│  └──────────────┬────────────────┘                      │                   │
+│                 ▼                                       │                   │
+│  ┌──────────────────────────────────────────────────────┴────────────────┐  │
+│  │ ExecutionBackgroundWorker (BackgroundService)                         │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
-
-### Componentes Clave:
-
-1. **`OrchestrationController`**: Expone endpoints REST para validación de contratos y arranque asíncrono (retornando `HTTP 202 Accepted`).
-2. **`NJsonSchema Validation Engine`**: Valida suites de prueba contra `schema-v1.1.json` (polimorfismo con `allOf` / `if-then` para `UI_SEQUENCE`, `SQL_EXECUTE`, `ASSERT_BUSINESS_RULES`). Carga eficiente en memoria mediante `Lazy<Task<JsonSchema>>` y recurso embebido (`EmbeddedResource`).
-3. **`ExecutionTaskQueue` (`IExecutionTaskQueue`)**: Encapsula un `Channel<ExecutionTask>` con `SingleReader = true` para un traspaso thread-safe y ultra-rápido entre la API y el Worker.
-4. **`ExecutionBackgroundWorker`**: `BackgroundService` continuo que consume tareas encoladas, ejecuta la orquestación simulada de lotes y publica telemetría en tiempo real.
-5. **`TelemetryHub` (SignalR)**: Hub WebSocket para emitir eventos de progreso porcentual y notificaciones toast de finalización hacia el frontend sin incurrir en *polling* HTTP.
 
 ---
 
-## 📋 Endpoints de la API (OpenAPI / Swagger)
+## 🎨 Módulos del Frontend (Angular 18+)
+
+### 1. `DashboardScorecardComponent`
+- **Signals y Reactividad**: `signal()`, `computed()`, y `effect()` para métricas de consistencia, latencia (P95/P99) y volumen.
+- **Regla de Umbral 99.5%**: Colorimetría condicional (`status-success` vs `status-error`), badge visual y banner de alerta con llamada a la acción para triaje inmediato.
+- **Micro-gráfica de Distribución**: Barra interactiva de transacciones con proporciones exactas (*Completadas*, *En Discrepancia*, *Fallidas*).
+
+### 2. `TriageDrawerComponent`
+- **Panel Lateral Deslizante (`mat-sidenav`)**: Acceso contextual a inconsistencias sin perder el estado del tablero.
+- **Extracción de Logs en Tiempo Real**: Simula extracción de trazas de ejecución asociadas al ID de inconsistencia (`LOG-001`, `LOG-002`, `LOG-003`).
+- **Visor de Diffs JSON**: Comparativa side-by-side entre valores esperados y obtenidos en transacciones bancarias.
+
+### 3. `ExecutionFormComponent`
+- **Generación Dinámica de Formularios (`DynamicFormGeneratorService`)**: Lee recursivamente `schema-v1.1.json` para construir `FormGroup` y `FormArray` reactivos.
+- **Validación Integrada**: Botón para validar contrato contra el backend (`/validate-schema`) antes de encolar.
+- **Disparo Asíncrono**: Despacha la suite al endpoint `/executions/start` e inicializa automáticamente la escucha de telemetría.
+
+### 4. `TelemetryService`
+- **Gestión de Conexión SignalR**: Conexión con reconexión automática (`withAutomaticReconnect`).
+- **Estado con Signals**: `executionId`, `progressPercentage`, `currentStep`, `status`, `summaryToast`.
+- **Modo Offline/Simulado**: Soporta fallback automático para demostración independiente de la UI.
+
+---
+
+## 📋 Endpoints de la API Backend
 
 | Método | Endpoint | Código HTTP | Descripción |
 | :--- | :--- | :--- | :--- |
@@ -54,71 +82,56 @@ El backend desacopla la recepción HTTP de alta densidad del procesamiento masiv
 | `POST` | `/api/v1/orchestration/executions/start` | `202 Accepted` / `400 Bad Request` | Encola la ejecución de una suite tras validar su schema y retorna el `executionId`. |
 | `WS` | `/hubs/telemetry` | `101 Switching Protocols` | Conexión WebSocket para telemetría en tiempo real. |
 
-### Eventos de Telemetría (SignalR):
-- **`ExecutionProgressUpdated`**: Transmite porcentaje completado (0-100%), paso activo y timestamp.
-- **`ExecutionCompletedToast`**: Transmite estado final (`COMPLETED_SUCCESS`, `FAILED`), mensaje de resumen y duración en segundos.
+---
+
+## 🔒 Auditoría de Seguridad y Buenas Prácticas
+
+- **Cero Credenciales en Código**: No existen contraseñas, tokens o cadenas de conexión en el repositorio.
+- **Contenedor no privilegiado**: `Dockerfile` configurado con usuario `appuser` para **Azure Container Apps**.
+- **Gestión de Secretos**: Variables de entorno e integración con **Azure Key Vault**.
+- **Protección Git**: `.gitignore` auditado que excluye `node_modules`, binarios compilados, secretos y temporales.
 
 ---
 
-## 🔒 Auditoría de Seguridad y Gestión de Secretos
+## 🚀 Guía de Puesta en Marcha
 
-El proyecto ha sido revisado conforme a las mejores prácticas de seguridad bancaria y Cloud Native:
-
-- **Cero Credenciales en Código**: No existen contraseñas, tokens, llaves criptográficas ni cadenas de conexión quemadas en código fuente ni en archivos de configuración (`appsettings.json`).
-- **Seguridad en Dockerfile**: El contenedor se ejecuta bajo un usuario no privilegiado (`appuser`), cumpliendo con los estándares de seguridad de **Azure Container Apps**.
-- **Secretos en la Nube**: Cualquier referencia a credenciales de bases de datos (Oracle/SQL Server) debe resolverse mediante **Azure Key Vault** o variables de entorno inyectadas en tiempo de ejecución en ACA.
-- **`.gitignore` Robusto**: Se excluyen automáticamente binarios compilados (`bin/`, `obj/`), secretos locales (`secrets.json`, `*.env`), certificados (`*.pfx`, `*.key`) y temporales de IDE.
-
----
-
-## 🚀 Requisitos y Ejecución Local
-
-### Prerrequisitos
+### 1. Prerrequisitos
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker](https://www.docker.com/) (opcional, para ejecución contenerizada)
+- [Node.js (v18+)](https://nodejs.org/) & `npm`
+- [Docker](https://www.docker.com/) (opcional)
 
-### 1. Clonar el Repositorio
-```bash
-git clone https://github.com/jose9410/Mitester.git
-cd Mitester
-```
+### 2. Ejecución Local en Desarrollo
 
-### 2. Restaurar dependencias y compilar
+**Backend (.NET 8):**
 ```bash
 cd MiTesterE2E
-dotnet restore
-dotnet build -c Release
-```
-
-### 3. Ejecutar la API
-```bash
 dotnet run
 ```
-La aplicación estará disponible por defecto en:
-- **Swagger UI**: `http://localhost:5000` (o el puerto asignado en launchSettings / logs de consola).
-- **Hub de SignalR**: `http://localhost:5000/hubs/telemetry`.
+Disponible en:
+- **SPA Angular (si está compilada)**: `http://localhost:5000`
+- **Swagger UI**: `http://localhost:5000/swagger`
+- **SignalR Hub**: `http://localhost:5000/hubs/telemetry`
 
----
-
-## 🐳 Construcción y Despliegue con Docker (Azure Container Apps)
-
-El proyecto incluye un `Dockerfile` multi-stage optimizado para producción:
-
+**Frontend (Angular 18+ Dev Server con Hot Reload):**
 ```bash
-# Construir la imagen Docker
-docker build -t mitester-backend:latest -f MiTesterE2E/Dockerfile MiTesterE2E/
+cd MiTesterE2E/ClientApp
+npm install
+npx ng serve --port 4200
+```
+Disponible en: `http://localhost:4200`.
 
-# Ejecutar el contenedor localmente
-docker run -d -p 8080:8080 --name mitester-app mitester-backend:latest
+### 3. Construcción del Contenedor Unificado (ACA)
+```bash
+# Construye tanto Angular como .NET en una única imagen multi-stage
+docker build -t mitester-fullstack:latest -f MiTesterE2E/Dockerfile MiTesterE2E/
+
+# Ejecutar el contenedor monolítico en puerto 8080
+docker run -d -p 8080:8080 --name mitester-app mitester-fullstack:latest
 ```
 
-En **Azure Container Apps (ACA)**:
-- Puerto objetivo de entrada (Ingress target port): `8080`
-- Protocolo de transporte: `HTTP` (soporta WebSockets de forma nativa)
-
 ---
 
-## 📂 Estructura del Repositorio
+## 📂 Estructura del Repositorio (Monolito Modular Unificado)
 
 ```text
 ├── .gitignore                     # Filtros de exclusión de artefactos y secretos
@@ -126,20 +139,22 @@ En **Azure Container Apps (ACA)**:
 ├── CONTEXTO_FASE1.md              # Requerimientos y arquitectura de negocio
 ├── schema-v1.1.json               # Contrato JSON Schema para suites E2E
 ├── swagger.yaml                   # Contrato OpenAPI 3.0 de endpoints REST
-└── MiTesterE2E/                   # Proyecto Backend ASP.NET Core
-    ├── MiTesterE2E.csproj         # Definición de dependencias (.NET 8, NJsonSchema)
-    ├── Program.cs                 # Configuración de pipeline, CORS, SignalR e Inyección
-    ├── appsettings.json           # Configuración de logs y cola en memoria
-    ├── Dockerfile                 # Configuración multi-stage para ACA
-    ├── schema-v1.1.json           # Recurso embebido para validación
-    ├── Orchestration/
-    │   ├── Contracts/             # DTOs de entrada y salida (OpenAPI)
-    │   ├── Controllers/           # OrchestrationController (REST API)
-    │   ├── Services/              # IExecutionTaskQueue y ExecutionTaskQueue (Channel)
-    │   └── Workers/               # ExecutionBackgroundWorker (Procesamiento en segundo plano)
-    └── Telemetry/
-        ├── TelemetryHub.cs        # Hub de SignalR para WebSockets
-        └── Contracts/             # Payloads tipados de eventos en tiempo real
+│
+└── MiTesterE2E/                   # Monolito Modular (.NET 8 + SPA Angular)
+    ├── MiTesterE2E.csproj         # Dependencias (.NET 8, NJsonSchema, SignalR)
+    ├── Program.cs                 # Pipeline, Static Files SPA, CORS y SignalR
+    ├── Dockerfile                 # Multi-stage Dockerfile (Node + .NET -> ACA)
+    ├── Orchestration/             # Controladores, canales y worker en background
+    ├── Telemetry/                 # Hub de SignalR y contratos de eventos
+    └── ClientApp/                 # Capa UI (Angular 18+ Standalone & M3)
+        ├── package.json           # Dependencias (@angular/material, @microsoft/signalr)
+        ├── src/
+        │   ├── app/
+        │   │   ├── app.config.ts  # Providers (HttpClient, AnimationsAsync, Routing)
+        │   │   ├── app.component.ts # Shell (Navbar, Telemetry Bar)
+        │   │   ├── core/          # TelemetryService, DynamicFormGeneratorService
+        │   │   └── features/      # Dashboard, Triage Drawer, Execution Form
+        │   └── styles/            # Tokens de diseño M3 y temas
 ```
 
 ---

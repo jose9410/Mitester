@@ -1,0 +1,327 @@
+@use '../../../styles/tokens' as t;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DASHBOARD SCORECARD — Estilos
+// ─────────────────────────────────────────────────────────────────────────────
+
+.scorecard-container {
+  padding: t.$space-6;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+// ── HEADER ────────────────────────────────────────────────────────────────────
+.scorecard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: t.$space-4;
+  margin-bottom: t.$space-6;
+}
+
+.header-left {
+  .page-title {
+    display: flex;
+    align-items: center;
+    gap: t.$space-2;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: t.$primary;
+
+    .page-icon { font-size: 1.75rem; color: t.$primary; }
+  }
+
+  .page-subtitle {
+    margin-top: t.$space-1;
+    color: t.$text-secondary;
+    font-size: .875rem;
+  }
+
+  .version-badge {
+    display: inline-block;
+    background: t.$primary;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: .75rem;
+    font-weight: 600;
+  }
+}
+
+// ── BADGE CONEXIÓN WEBSOCKET ──────────────────────────────────────────────────
+.connection-badge {
+  display: flex;
+  align-items: center;
+  gap: t.$space-2;
+  padding: t.$space-2 t.$space-3;
+  border-radius: 99px;
+  font-size: .75rem;
+  font-weight: 600;
+  background: #F1F5F9;
+  border: 1px solid t.$surface-border;
+  transition: all t.$transition-normal;
+
+  .conn-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: t.$text-disabled;
+  }
+
+  &.conn-Connected   { .conn-dot { background: t.$go-color; }    background: t.$go-light;    border-color: t.$go-color; }
+  &.conn-Connecting,
+  &.conn-Reconnecting { .conn-dot { background: t.$triage-color; animation: pulse 1s infinite; } }
+  &.conn-Error        { .conn-dot { background: t.$nogo-color; }  background: t.$nogo-light;  border-color: t.$nogo-color; }
+}
+
+// ── PROGRESS CARD (SignalR en tiempo real) ────────────────────────────────────
+.progress-card {
+  margin-bottom: t.$space-4;
+  background: linear-gradient(135deg, #EEF2FF 0%, #E8F5E9 100%) !important;
+  border: 1px solid #{t.$primary}33 !important;
+
+  .progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: t.$space-3;
+
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: t.$space-2;
+      color: t.$primary;
+      font-weight: 500;
+      font-size: .875rem;
+
+      mat-icon { font-size: 1.1rem; }
+    }
+
+    .progress-pct {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: t.$primary;
+    }
+  }
+
+  .progress-hint {
+    margin-top: t.$space-2;
+    font-size: .75rem;
+    color: t.$text-secondary;
+    font-family: t.$font-mono;
+  }
+}
+
+// ── GRID DE MÉTRICAS ──────────────────────────────────────────────────────────
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: t.$space-4;
+
+  @media (min-width: 1024px) {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  }
+}
+
+.loading-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: t.$space-4;
+}
+
+// ── METRIC CARD BASE ──────────────────────────────────────────────────────────
+.metric-card {
+  transition: transform t.$transition-normal, box-shadow t.$transition-normal !important;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: t.$shadow-lg !important;
+  }
+
+  mat-card-content { padding: t.$space-5 !important; }
+
+  .metric-label {
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: t.$text-secondary;
+    margin-bottom: t.$space-2;
+  }
+
+  .metric-value {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: t.$text-primary;
+  }
+
+  .metric-sub, .metric-threshold {
+    display: flex;
+    align-items: center;
+    gap: t.$space-1;
+    margin-top: t.$space-2;
+    font-size: .75rem;
+    color: t.$text-secondary;
+
+    .sub-icon { font-size: 1rem; }
+  }
+}
+
+// ── CARD PRINCIPAL: % CONSISTENCIA ────────────────────────────────────────────
+.metric-main {
+  &.above-threshold { border-left: 4px solid t.$go-color !important; }
+  &:not(.above-threshold) { border-left: 4px solid t.$nogo-color !important; }
+
+  .consistency-value { color: t.$primary; }
+}
+
+// Barra de threshold personalizada
+.threshold-bar {
+  position: relative;
+  height: 8px;
+  background: t.$surface-border;
+  border-radius: 99px;
+  margin-top: t.$space-3;
+  overflow: visible;
+
+  .threshold-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 99px;
+    transition: width t.$transition-slow;
+    max-width: 100%;
+
+    &.fill-go   { background: t.$go-color; }
+    &.fill-nogo { background: t.$nogo-color; }
+  }
+
+  .threshold-marker {
+    position: absolute;
+    top: -4px;
+    width: 2px;
+    height: 16px;
+    background: t.$primary;
+    border-radius: 1px;
+    transform: translateX(-50%);
+    cursor: help;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 8px; height: 8px;
+      background: t.$primary;
+      border-radius: 50%;
+    }
+  }
+}
+
+// ── BADGE GO / NO-GO ──────────────────────────────────────────────────────────
+.badge-card {
+  .status-badge-container { margin: t.$space-4 0; }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: t.$space-2;
+    padding: t.$space-3 t.$space-4;
+    border-radius: t.$radius-md;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: .05em;
+
+    .badge-icon { font-size: 1.5rem; }
+
+    &.badge-go {
+      background: t.$go-light;
+      color: t.$go-color;
+      border: 1.5px solid t.$go-color;
+    }
+    &.badge-nogo {
+      background: t.$nogo-light;
+      color: t.$nogo-color;
+      border: 1.5px solid t.$nogo-color;
+    }
+    &.badge-triage {
+      background: t.$triage-light;
+      color: t.$triage-color;
+      border: 1.5px solid t.$triage-color;
+    }
+  }
+
+  .badge-hint {
+    font-size: .8rem;
+    color: t.$text-secondary;
+    line-height: 1.5;
+  }
+}
+
+// ── DELTA ─────────────────────────────────────────────────────────────────────
+.delta-positive { color: t.$go-color   !important; }
+.delta-negative { color: t.$nogo-color !important; }
+
+.version-comparison {
+  display: flex;
+  align-items: center;
+  gap: t.$space-2;
+  margin-top: t.$space-3;
+
+  mat-icon { color: t.$text-secondary; font-size: 1rem; }
+
+  .version-tag {
+    background: t.$surface-border;
+    padding: 2px 8px;
+    border-radius: t.$radius-sm;
+    font-size: .75rem;
+    font-family: t.$font-mono;
+
+    &.current { background: t.$primary; color: white; }
+  }
+}
+
+// ── TX VALUE ──────────────────────────────────────────────────────────────────
+.tx-value {
+  font-size: 1.8rem !important;
+  font-family: t.$font-mono !important;
+  color: t.$primary !important;
+}
+
+// ── SKELETON LOADING ──────────────────────────────────────────────────────────
+.skeleton-card {
+  .skeleton-line {
+    height: 16px;
+    background: linear-gradient(90deg, #E2E8F0 25%, #F1F5F9 50%, #E2E8F0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: t.$radius-sm;
+    margin-bottom: t.$space-3;
+
+    &.wide  { width: 80%; }
+    &.narrow { width: 40%; }
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+// ── ERROR CARD ─────────────────────────────────────────────────────────────────
+.error-card {
+  mat-card-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: t.$space-4;
+    padding: t.$space-8 !important;
+    text-align: center;
+
+    .error-icon {
+      font-size: 3rem;
+      color: t.$nogo-color;
+    }
+  }
+}

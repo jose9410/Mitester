@@ -1,0 +1,144 @@
+@use './styles/tokens' as t;
+@use './styles/theme';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESET Y BASE GLOBAL
+// ─────────────────────────────────────────────────────────────────────────────
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: t.$font-family;
+  font-size: 14px;
+  line-height: 1.6;
+  color: t.$text-primary;
+  background-color: t.$surface-bg;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OVERRIDES GLOBALES DE ANGULAR MATERIAL 3
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Cards — Superficie blanca con sombra suave
+.mat-mdc-card {
+  background-color: t.$surface-card !important;
+  border-radius: t.$radius-md !important;
+  box-shadow: t.$shadow-md !important;
+  border: 1px solid t.$surface-border !important;
+}
+
+// Botones primarios — Azul bancario
+.mat-mdc-raised-button.mat-primary {
+  background-color: t.$primary !important;
+  color: white !important;
+  border-radius: t.$radius-sm !important;
+  font-weight: 600 !important;
+  letter-spacing: .02em;
+  transition: background-color t.$transition-normal, box-shadow t.$transition-normal !important;
+
+  &:hover {
+    background-color: t.$primary-light !important;
+    box-shadow: t.$shadow-md !important;
+  }
+}
+
+// Snackbar / Toast — Estilizado con borde izquierdo de color semántico
+.snack-success {
+  .mdc-snackbar__surface {
+    background-color: t.$go-light !important;
+    color: t.$go-color !important;
+    border-left: 4px solid t.$go-color !important;
+  }
+  .mat-mdc-button { color: t.$go-color !important; }
+}
+
+.snack-error {
+  .mdc-snackbar__surface {
+    background-color: t.$nogo-light !important;
+    color: t.$nogo-color !important;
+    border-left: 4px solid t.$nogo-color !important;
+  }
+  .mat-mdc-button { color: t.$nogo-color !important; }
+}
+
+.snack-info {
+  .mdc-snackbar__surface {
+    background-color: #EEF2FF !important;
+    color: t.$primary !important;
+    border-left: 4px solid t.$primary !important;
+  }
+  .mat-mdc-button { color: t.$primary !important; }
+}
+
+// Progress Bar — Color semántico
+.mat-mdc-progress-bar {
+  --mdc-linear-progress-active-indicator-color: #{t.$primary};
+  --mdc-linear-progress-track-color: #{t.$surface-border};
+  border-radius: 99px !important;
+  height: 8px !important;
+}
+
+// Drawer Panel
+.mat-drawer-container {
+  background-color: t.$surface-bg !important;
+}
+
+// Chips / Tags de área
+.tag-desarrollo {
+  background-color: t.$go-light !important;
+  color: t.$go-color !important;
+  border: 1px solid t.$go-color !important;
+  font-weight: 600 !important;
+}
+
+.tag-soporte {
+  background-color: t.$triage-light !important;
+  color: t.$triage-color !important;
+  border: 1px solid t.$triage-color !important;
+  font-weight: 600 !important;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITIES GLOBALES
+// ─────────────────────────────────────────────────────────────────────────────
+
+.text-primary   { color: t.$text-primary   !important; }
+.text-secondary { color: t.$text-secondary !important; }
+.text-go        { color: t.$go-color       !important; }
+.text-nogo      { color: t.$nogo-color     !important; }
+.text-triage    { color: t.$triage-color   !important; }
+
+.font-mono {
+  font-family: t.$font-mono !important;
+  font-size: 12px !important;
+}
+
+.page-container {
+  padding: t.$space-6;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+// Animación de entrada para cards
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation: fadeSlideIn t.$transition-slow both;
+}
+
+// Pulse para indicadores de actividad
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.pulse { animation: pulse 1.5s ease-in-out infinite; }

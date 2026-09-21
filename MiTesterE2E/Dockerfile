@@ -1,43 +1,56 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 1: BUILD
-# Usa el SDK completo para compilar y publicar la aplicación.
+# STAGE 1: FRONTEND BUILD (Angular 18/19 Standalone)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM node:20-alpine AS frontend-build
+WORKDIR /app/client
+
+# Instalar dependencias usando npm ci para builds reproducibles
+COPY ClientApp/package*.json ./
+RUN npm ci
+
+# Copiar código fuente del frontend y compilar para producción
+COPY ClientApp/ ./
+RUN npm run build -- --configuration production
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 2: BACKEND BUILD (.NET 8 SDK)
+# ─────────────────────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend-build
 WORKDIR /src
 
 # Copiar solo el .csproj primero para aprovechar el cache de capas Docker
-# (si solo cambia el código fuente, esta capa no se reconstruye)
 COPY ["MiTesterE2E.csproj", "./"]
 RUN dotnet restore "MiTesterE2E.csproj"
 
-# Copiar el resto del código fuente (incluye schema-v1.1.json como EmbeddedResource)
+# Copiar el resto del código fuente backend
 COPY . .
 
-# Publicar en modo Release, sin el SDK (self-contained = false, usa el runtime de la imagen base)
+# Copiar los artefactos generados de Angular a wwwroot para que ASP.NET Core los sirva
+COPY --from=frontend-build /app/client/dist/frontend/browser ./wwwroot/
+
+# Publicar la solución unificada en modo Release
 RUN dotnet publish "MiTesterE2E.csproj" \
     -c Release \
     -o /app/publish \
     --no-restore
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 2: RUNTIME
-# Usa únicamente el ASP.NET Core Runtime (imagen más liviana ~220MB vs ~900MB del SDK).
-# Esta es la imagen que se despliega en Azure Container Apps (ACA).
+# STAGE 3: RUNTIME UNIFICADO (Monolito Modular en ACA)
 # ─────────────────────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# Usuario no-root para cumplir con políticas de seguridad de ACA
+# Usuario no-root para cumplir con políticas de seguridad de Azure Container Apps
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
 USER appuser
 
-# Copiar los artefactos publicados desde el stage de build
-COPY --from=build --chown=appuser:appuser /app/publish .
+# Copiar los artefactos publicados (incluyendo wwwroot con Angular)
+COPY --from=backend-build --chown=appuser:appuser /app/publish .
 
 # Puerto estándar de ACA (HTTP interno; ACA gestiona TLS/HTTPS externamente)
 EXPOSE 8080
 
-# Variables de entorno por defecto (pueden sobreescribirse en ACA via Container App environment)
+# Variables de entorno por defecto
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 

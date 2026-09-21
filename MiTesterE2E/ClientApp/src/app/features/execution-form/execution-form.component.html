@@ -1,0 +1,207 @@
+<div class="execution-container animate-in">
+
+  <!-- Header -->
+  <div class="execution-header">
+    <h1 class="page-title">
+      <mat-icon>play_circle</mat-icon>
+      Configurar Ejecución E2E
+    </h1>
+    <p class="page-subtitle">
+      Define la suite de prueba. Los campos se generan dinámicamente desde
+      <code>schema-v1.1.json</code> vía el motor de metadatos.
+    </p>
+  </div>
+
+  <!-- Barra de progreso activa (visible cuando hay ejecución SignalR en curso) -->
+  @if (isRunning()) {
+    <mat-card class="live-progress-card animate-in">
+      <mat-card-content>
+        <div class="live-header">
+          <span class="live-dot"></span>
+          <span class="live-label">Ejecución en curso</span>
+          <span class="live-step pulse">{{ activeStep() }}</span>
+          <span class="live-pct">{{ progressLabel() }}</span>
+        </div>
+        <mat-progress-bar mode="determinate" [value]="progressValue()"></mat-progress-bar>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (suiteForm(); as form) {
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+
+      <mat-stepper orientation="vertical" linear="false" class="suite-stepper">
+
+        <!-- ══ STEP 1: Configuración Raíz ══════════════════════════════════ -->
+        <mat-step label="Configuración de la Suite">
+          <mat-card class="step-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>settings</mat-icon>
+              <mat-card-title>Metadatos de la Suite</mat-card-title>
+              <mat-card-subtitle>Tenant, entorno y aplicación bajo certificación</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              @if (formConfig(); as config) {
+                <div class="field-grid">
+                  @for (field of config.rootFields; track field.key) {
+                    <mat-form-field
+                      [class]="'field-' + field.widget"
+                      appearance="outline"
+                    >
+                      <mat-label>{{ field.label }}</mat-label>
+
+                      @switch (field.widget) {
+                        @case ('select') {
+                          <mat-select [formControlName]="field.key" [required]="field.required">
+                            @for (opt of field.options; track opt.value) {
+                              <mat-option [value]="opt.value">{{ opt.label }}</mat-option>
+                            }
+                          </mat-select>
+                        }
+                        @default {
+                          <input matInput [formControlName]="field.key"
+                                 [placeholder]="field.placeholder ?? ''"
+                                 [required]="field.required" />
+                        }
+                      }
+
+                      @if (field.hint) {
+                        <mat-hint>{{ field.hint }}</mat-hint>
+                      }
+                      @if (isFieldInvalid(form, field.key)) {
+                        <mat-error>{{ field.label }} es obligatorio</mat-error>
+                      }
+                    </mat-form-field>
+                  }
+                </div>
+              }
+            </mat-card-content>
+            <mat-card-actions>
+              <button mat-button matStepperNext type="button" color="primary">
+                Siguiente <mat-icon>arrow_forward</mat-icon>
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        </mat-step>
+
+        <!-- ══ STEP 2: Procesos ═════════════════════════════════════════════ -->
+        <mat-step label="Procesos y Steps">
+          <div formArrayName="processes">
+            @for (proc of getProcesses(form).controls; track i; let i = $index) {
+              <mat-card class="process-card step-card">
+                <mat-card-header>
+                  <mat-icon mat-card-avatar>account_tree</mat-icon>
+                  <mat-card-title>Proceso {{ i + 1 }}</mat-card-title>
+                </mat-card-header>
+                <mat-card-content [formGroupName]="i">
+                  @if (formConfig(); as config) {
+                    <div class="field-grid">
+                      @for (field of config.processes[0].contextFields; track field.key) {
+                        <mat-form-field appearance="outline" [class]="'field-' + field.widget">
+                          <mat-label>{{ field.label }}</mat-label>
+
+                          @switch (field.widget) {
+                            @case ('datepicker') {
+                              <ng-container>
+                                <input matInput [matDatepicker]="dp" [formControlName]="field.key" />
+                                <mat-datepicker-toggle matIconSuffix [for]="dp"></mat-datepicker-toggle>
+                                <mat-datepicker #dp></mat-datepicker>
+                              </ng-container>
+                            }
+                            @default {
+                              <input matInput [formControlName]="field.key"
+                                     [placeholder]="field.placeholder ?? ''" />
+                            }
+                          }
+
+                          @if (field.hint) {
+                            <mat-hint>{{ field.hint }}</mat-hint>
+                          }
+                        </mat-form-field>
+                      }
+                    </div>
+                  }
+                </mat-card-content>
+              </mat-card>
+            }
+          </div>
+
+          <div class="step-nav-actions">
+            <button mat-button matStepperPrevious type="button">
+              <mat-icon>arrow_back</mat-icon> Anterior
+            </button>
+            <button mat-button matStepperNext type="button" color="primary">
+              Siguiente <mat-icon>arrow_forward</mat-icon>
+            </button>
+          </div>
+        </mat-step>
+
+        <!-- ══ STEP 3: Revisión y Lanzamiento ══════════════════════════════ -->
+        <mat-step label="Revisar y Lanzar">
+          <mat-card class="step-card review-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>rocket_launch</mat-icon>
+              <mat-card-title>Revisión Final</mat-card-title>
+              <mat-card-subtitle>Valida el schema y lanza la ejecución asíncrona</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+
+              <!-- Resultado de validación de schema -->
+              @if (validationResult(); as vr) {
+                <div class="validation-result" [class.valid]="vr.isValid" [class.invalid]="!vr.isValid">
+                  <mat-icon>{{ vr.isValid ? 'check_circle' : 'error' }}</mat-icon>
+                  <div>
+                    <strong>{{ vr.isValid ? 'Schema válido' : 'Errores de schema' }}</strong>
+                    @if (!vr.isValid) {
+                      <ul class="error-list">
+                        @for (err of vr.validationErrors; track err) {
+                          <li class="font-mono">{{ err }}</li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- JSON Preview -->
+              <div class="json-preview">
+                <div class="preview-header">
+                  <mat-icon>data_object</mat-icon>
+                  <span>Preview del JSON de la Suite</span>
+                </div>
+                <pre class="font-mono preview-content">{{ form.value | json }}</pre>
+              </div>
+
+            </mat-card-content>
+            <mat-card-actions class="launch-actions">
+              <button mat-button matStepperPrevious type="button">
+                <mat-icon>arrow_back</mat-icon> Anterior
+              </button>
+              <button mat-stroked-button color="primary" type="button"
+                      [disabled]="isValidating()" (click)="validateSchema()">
+                @if (isValidating()) {
+                  <mat-icon class="spin">sync</mat-icon>
+                } @else {
+                  <mat-icon>verified</mat-icon>
+                }
+                Validar Schema
+              </button>
+              <button mat-raised-button color="primary" type="submit"
+                      [disabled]="!canSubmit()"
+                      matTooltip="Inicia ejecución asíncrona en el backend .NET 8">
+                @if (isSubmitting()) {
+                  <mat-icon class="spin">sync</mat-icon>
+                } @else {
+                  <mat-icon>rocket_launch</mat-icon>
+                }
+                Lanzar Ejecución
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        </mat-step>
+
+      </mat-stepper>
+    </form>
+  }
+
+</div>

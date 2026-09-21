@@ -1,0 +1,98 @@
+@use '@angular/material' as mat;
+@use './tokens' as t;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMA PERSONALIZADO — Angular Material 3 (Mi Tester E2E)
+// Paleta M3 generada a partir de los tokens semánticos bancarios
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Definición de paleta personalizada para Material Design 3
+$mitester-primary: mat.m2-define-palette((
+  50:  #E3EAF4,
+  100: #B9CADF,
+  200: #8BA8CB,
+  300: #5C85B6,
+  400: #3969A6,
+  500: #1B365D,  // Primary token
+  600: #17304D,
+  700: #12273F,
+  800: #0D1E31,
+  900: #080F1F,
+  contrast: (
+    50:  rgba(0,0,0,.87),
+    100: rgba(0,0,0,.87),
+    200: rgba(0,0,0,.87),
+    300: white,
+    400: white,
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+  )
+), 500, 200, 900);
+
+$mitester-accent: mat.m2-define-palette((
+  50:  #E8F5E9,
+  100: #C8E6C9,
+  200: #A5D6A7,
+  300: #81C784,
+  400: #66BB6A,
+  500: #2E7D32,  // Go color
+  600: #2E7D32,
+  700: #1B5E20,
+  800: #1B5E20,
+  900: #0A3D0A,
+  contrast: (
+    50:  rgba(0,0,0,.87),
+    100: rgba(0,0,0,.87),
+    200: rgba(0,0,0,.87),
+    300: rgba(0,0,0,.87),
+    400: white,
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+  )
+), 500, 200, 900);
+
+$mitester-warn: mat.m2-define-palette((
+  50:  #FFEBEE,
+  100: #FFCDD2,
+  200: #EF9A9A,
+  300: #E57373,
+  400: #EF5350,
+  500: #C62828,  // No-Go color
+  600: #C62828,
+  700: #B71C1C,
+  800: #B71C1C,
+  900: #7F0000,
+  contrast: (
+    50:  rgba(0,0,0,.87),
+    100: rgba(0,0,0,.87),
+    200: rgba(0,0,0,.87),
+    300: rgba(0,0,0,.87),
+    400: white,
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+  )
+), 500, 200, 900);
+
+$mitester-theme: mat.m2-define-light-theme((
+  color: (
+    primary: $mitester-primary,
+    accent:  $mitester-accent,
+    warn:    $mitester-warn,
+  ),
+  typography: mat.m2-define-typography-config(
+    $font-family: 'Inter, Roboto, system-ui, sans-serif',
+  ),
+  density: 0,
+));
+
+// Aplicar tema base
+@include mat.all-component-themes($mitester-theme);

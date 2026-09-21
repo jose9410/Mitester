@@ -1,0 +1,58 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// DESIGN TOKENS — Mi Tester E2E
+// Paleta semántica bancaria conforme a WCAG 2.2 AA (contraste > 4.5:1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Colores Primarios
+$primary:       #1B365D;   // Azul Dominante — Banca / Confianza
+$primary-light: #2E5090;
+$primary-dark:  #0F2040;
+
+// Colores Semánticos de Estado
+$go-color:      #2E7D32;   // Verde Éxito  — Go / Conciliación óptima
+$go-light:      #E8F5E9;
+$nogo-color:    #C62828;   // Rojo Alerta  — No-Go / Inconsistencias críticas
+$nogo-light:    #FFEBEE;
+$triage-color:  #E65100;   // Naranja      — Requires Triage
+$triage-light:  #FFF3E0;
+
+// Superficie y Fondo
+$surface-bg:    #F4F6F9;   // Gris Neutro  — Fondo general (ergonomía visual)
+$surface-card:  #FFFFFF;
+$surface-border: #E2E8F0;
+
+// Tipografía y Texto
+$text-primary:   #1E293B;   // Contraste > 7:1 sobre superficie
+$text-secondary: #475569;   // Contraste > 4.5:1
+$text-disabled:  #94A3B8;
+
+// Elevaciones y Sombras (M3)
+$shadow-sm:  0 1px 3px rgba(0, 0, 0, .08), 0 1px 2px rgba(0, 0, 0, .06);
+$shadow-md:  0 4px 6px rgba(0, 0, 0, .07), 0 2px 4px rgba(0, 0, 0, .06);
+$shadow-lg:  0 10px 15px rgba(0, 0, 0, .08), 0 4px 6px rgba(0, 0, 0, .05);
+
+// Radios de borde (M3 style)
+$radius-sm:  8px;
+$radius-md:  12px;
+$radius-lg:  16px;
+$radius-xl:  24px;
+
+// Espaciado base
+$space-1: 4px;
+$space-2: 8px;
+$space-3: 12px;
+$space-4: 16px;
+$space-5: 20px;
+$space-6: 24px;
+$space-8: 32px;
+$space-10: 40px;
+$space-12: 48px;
+
+// Tipografía
+$font-family: 'Inter', 'Roboto', system-ui, sans-serif;
+$font-mono:   'JetBrains Mono', 'Fira Code', monospace;
+
+// Transiciones
+$transition-fast:   150ms ease;
+$transition-normal: 250ms ease;
+$transition-slow:   350ms cubic-bezier(0.4, 0, 0.2, 1);

@@ -1,0 +1,12 @@
+**/.git
+**/.vs
+**/.vscode
+**/.idea
+bin/
+obj/
+ClientApp/node_modules/
+ClientApp/dist/
+ClientApp/.angular/
+**/*.user
+**/*.suo
+*.log

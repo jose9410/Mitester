@@ -1,0 +1,265 @@
+<mat-sidenav-container class="triage-container">
+
+  <!-- ══════════════════════════════════════════════════════════
+       PANEL PRINCIPAL — Lista de Inconsistencias
+  ═══════════════════════════════════════════════════════════ -->
+  <mat-sidenav-content class="triage-main">
+
+    <!-- Header -->
+    <div class="triage-header animate-in">
+      <div class="header-left">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">bug_report</mat-icon>
+          Módulo de Triage
+        </h1>
+        <p class="page-subtitle">
+          Inconsistencias detectadas en la ejecución E2E — ordenadas por impacto monetario
+        </p>
+      </div>
+
+      @if (!isLoadingList() && inconsistencies().length > 0) {
+        <div class="summary-chips">
+          <div class="summary-chip count-chip">
+            <mat-icon>error_outline</mat-icon>
+            {{ totalCount() }} inconsistencias
+          </div>
+          <div class="summary-chip impact-chip">
+            <mat-icon>account_balance</mat-icon>
+            {{ totalImpactFormatted() }}
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Estado de carga -->
+    @if (isLoadingList()) {
+      <div class="loading-state">
+        <mat-spinner diameter="48"></mat-spinner>
+        <p>Cargando inconsistencias...</p>
+      </div>
+    }
+
+    <!-- Lista de inconsistencias -->
+    @if (!isLoadingList()) {
+      <div class="inconsistency-grid">
+        @for (item of inconsistencies(); track item.inconsistencyId) {
+          <mat-card
+            class="inconsistency-card animate-in"
+            [class.card-desarrollo]="item.suggestedTag === 'TAG_DESARROLLO'"
+            [class.card-soporte]="item.suggestedTag === 'TAG_SOPORTE'"
+            (click)="openDrawer(item)"
+            role="button"
+            [attr.aria-label]="'Ver detalles de ' + item.inconsistencyId"
+            tabindex="0"
+            (keydown.enter)="openDrawer(item)"
+          >
+            <mat-card-content>
+              <div class="card-top">
+                <span class="inconsistency-id font-mono">{{ item.inconsistencyId }}</span>
+                <mat-chip class="area-chip" [ngClass]="getTagClass(item.suggestedTag)">
+                  <mat-icon>{{ getTagIcon(item.suggestedTag) }}</mat-icon>
+                  {{ getTagLabel(item.suggestedTag) }}
+                </mat-chip>
+              </div>
+
+              <div class="card-component">
+                <mat-icon>storage</mat-icon>
+                {{ item.component }}
+              </div>
+
+              <div class="card-impact">
+                <span class="impact-label">Impacto monetario</span>
+                <span class="impact-value">{{ formatImpact(item.monetaryImpact) }}</span>
+              </div>
+
+              <div class="card-field">
+                <mat-icon>warning_amber</mat-icon>
+                Campo: <code>{{ item.fieldAffected }}</code>
+              </div>
+
+              <div class="card-action">
+                <button mat-stroked-button color="primary" (click)="$event.stopPropagation(); openDrawer(item)">
+                  <mat-icon>search</mat-icon>
+                  Ver Log Contextual
+                </button>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        } @empty {
+          <div class="empty-state">
+            <mat-icon class="empty-icon">check_circle</mat-icon>
+            <h3>Sin inconsistencias detectadas</h3>
+            <p>La ejecución no reportó discrepancias en este lote.</p>
+          </div>
+        }
+      </div>
+    }
+
+  </mat-sidenav-content>
+
+  <!-- ══════════════════════════════════════════════════════════
+       DRAWER LATERAL — Log Contextual y Escalamiento
+  ═══════════════════════════════════════════════════════════ -->
+  <mat-sidenav
+    position="end"
+    [opened]="isDrawerOpen()"
+    mode="over"
+    class="triage-drawer"
+    (closedStart)="closeDrawer()"
+  >
+    @if (selectedItem(); as item) {
+      <div class="drawer-content">
+
+        <!-- Drawer Header -->
+        <div class="drawer-header">
+          <div class="drawer-title-group">
+            <span class="drawer-id font-mono">{{ item.inconsistencyId }}</span>
+            <h2 class="drawer-title">{{ item.component }}</h2>
+          </div>
+          <button mat-icon-button (click)="closeDrawer()" aria-label="Cerrar panel">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <!-- Metadatos rápidos -->
+        <div class="drawer-meta">
+          <div class="meta-item">
+            <mat-icon>account_balance</mat-icon>
+            <div>
+              <span class="meta-label">Impacto Monetario</span>
+              <span class="meta-value impact-highlight">{{ formatImpact(item.monetaryImpact) }}</span>
+            </div>
+          </div>
+          <div class="meta-item">
+            <mat-icon>warning_amber</mat-icon>
+            <div>
+              <span class="meta-label">Campo Afectado</span>
+              <code class="meta-value">{{ item.fieldAffected }}</code>
+            </div>
+          </div>
+          <div class="meta-item">
+            <mat-icon>{{ getTagIcon(item.suggestedTag) }}</mat-icon>
+            <div>
+              <span class="meta-label">Clasificación Sugerida</span>
+              <mat-chip [ngClass]="getTagClass(item.suggestedTag)">
+                {{ getTagLabel(item.suggestedTag) }}
+              </mat-chip>
+            </div>
+          </div>
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <!-- Log Contextual -->
+        <div class="log-section">
+          <h3 class="section-title">
+            <mat-icon>terminal</mat-icon>
+            Log Contextual de Base de Datos
+          </h3>
+
+          @if (isLoadingLog()) {
+            <div class="log-loading">
+              <mat-spinner diameter="32"></mat-spinner>
+              <span>Extrayendo log desde {{ item.inconsistencyId }}...</span>
+            </div>
+          } @else {
+            @if (contextualLog(); as log) {
+              <!-- Catálogo -->
+              <div class="catalog-badge">
+                <mat-icon>{{ log.targetCatalog === 'Oracle' ? 'database' : 'storage' }}</mat-icon>
+                {{ log.targetCatalog }}
+              </div>
+
+              <!-- Query fallida -->
+              <div class="log-block query-block">
+                <div class="log-block-label">
+                  <mat-icon>code</mat-icon>
+                  Consulta Ejecutada
+                </div>
+                <pre class="font-mono">{{ log.failedQuery }}</pre>
+              </div>
+
+              <!-- Mensaje de error -->
+              <div class="log-block error-block">
+                <div class="log-block-label error-label">
+                  <mat-icon>error</mat-icon>
+                  Mensaje de Error Exacto
+                </div>
+                <pre class="font-mono error-text">{{ log.exactErrorMessage }}</pre>
+              </div>
+
+              <!-- Acción sugerida -->
+              <div class="suggested-action">
+                <mat-icon class="action-icon">lightbulb</mat-icon>
+                <div>
+                  <span class="action-label">Acción Sugerida</span>
+                  <p class="action-text">{{ log.suggestedActionText }}</p>
+                </div>
+              </div>
+            }
+          }
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <!-- Escalamiento -->
+        <div class="escalate-section">
+          <h3 class="section-title">
+            <mat-icon>assignment_turned_in</mat-icon>
+            Escalar Inconsistencia
+          </h3>
+
+          <mat-form-field appearance="outline" class="notes-field">
+            <mat-label>Notas adicionales (opcional)</mat-label>
+            <textarea
+              matInput
+              rows="3"
+              [value]="customNotes()"
+              (input)="customNotes.set($any($event.target).value)"
+              placeholder="Contexto adicional para el ticket..."
+              aria-label="Notas adicionales para el escalamiento"
+            ></textarea>
+          </mat-form-field>
+
+          <div class="escalate-actions">
+            <button
+              mat-raised-button
+              class="btn-desarrollo"
+              [disabled]="isEscalating()"
+              (click)="escalate('JIRA_DEVELOPMENT')"
+              aria-label="Escalar a Área de Desarrollo - crea ticket Jira"
+              [matTooltip]="'Crea un ticket en JIRA para el equipo de Desarrollo'"
+            >
+              @if (isEscalating()) {
+                <mat-spinner diameter="16"></mat-spinner>
+              } @else {
+                <mat-icon>code</mat-icon>
+              }
+              [Tag: Área Desarrollo]
+            </button>
+
+            <button
+              mat-raised-button
+              class="btn-soporte"
+              [disabled]="isEscalating()"
+              (click)="escalate('SUPPORT_QUEUE')"
+              aria-label="Escalar a cola de Soporte"
+              [matTooltip]="'Envía a la cola de Soporte Técnico'"
+            >
+              @if (isEscalating()) {
+                <mat-spinner diameter="16"></mat-spinner>
+              } @else {
+                <mat-icon>support_agent</mat-icon>
+              }
+              [Tag: Área Soporte]
+            </button>
+          </div>
+        </div>
+
+      </div>
+    }
+  </mat-sidenav>
+
+</mat-sidenav-container>
