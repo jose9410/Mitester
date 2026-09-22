@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MiTesterE2E.Automation.Services;
 using MiTesterE2E.Orchestration.Services;
 using MiTesterE2E.Orchestration.Workers;
 using MiTesterE2E.Persistence.Context;
@@ -55,8 +56,10 @@ else
 builder.Services.AddSignalR();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. ORQUESTACIÓN: Cola en memoria (Channel) + BackgroundWorker
+// 4. AUTOMATIZACIÓN Y ORQUESTACIÓN: Playwright, Channel Queue + BackgroundWorker
 // ─────────────────────────────────────────────────────────────────────────────
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<IPlaywrightCommandExecutor, PlaywrightCommandExecutor>();
 builder.Services.AddSingleton<IExecutionTaskQueue, ExecutionTaskQueue>();
 builder.Services.AddHostedService<ExecutionBackgroundWorker>();
 

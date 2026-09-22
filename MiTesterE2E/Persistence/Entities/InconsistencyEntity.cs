@@ -44,6 +44,17 @@ public class InconsistencyEntity : ITenantEntity
 
     public DateTimeOffset DetectedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// Indica si existe evidencia visual en captura de pantalla asociada a esta inconsistencia.
+    /// </summary>
+    public bool HasScreenshot { get; set; }
+
+    /// <summary>
+    /// Evidencia fotográfica del fallo comprimida en JPEG (75%) codificada en Base64 (máx 250KB).
+    /// Carga perezosa (Lazy Loading) únicamente bajo demanda en el Triage Drawer.
+    /// </summary>
+    public string? ScreenshotBase64 { get; set; }
+
     [Required]
     [MaxLength(100)]
     public string TenantId { get; set; } = string.Empty;

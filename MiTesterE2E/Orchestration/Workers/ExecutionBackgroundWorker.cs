@@ -1,87 +1,77 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using MiTesterE2E.Automation.Contracts;
+using MiTesterE2E.Automation.Services;
 using MiTesterE2E.Orchestration.Contracts;
 using MiTesterE2E.Orchestration.Services;
+using MiTesterE2E.Persistence.Context;
+using MiTesterE2E.Persistence.Entities;
+using MiTesterE2E.Persistence.Multitenancy;
 using MiTesterE2E.Telemetry;
 using MiTesterE2E.Telemetry.Contracts;
 
 namespace MiTesterE2E.Orchestration.Workers;
 
 /// <summary>
-/// Servicio en segundo plano que consume tareas del Channel y emite telemetría
-/// en tiempo real hacia el frontend Angular a través del TelemetryHub de SignalR.
-///
-/// Ciclo de vida:
-///   1. Se inicia automáticamente con el host (IHostedService / BackgroundService).
-///   2. Permanece activo en un bucle hasta que el host solicita shutdown.
-///   3. Para cada ExecutionTask dequeued:
-///      a. Parsea el JSON para extraer metadatos (tenant, procesos, pasos).
-///      b. Simula el procesamiento en 10 ticks de 10% cada uno con Task.Delay.
-///      c. En cada tick emite "ExecutionProgressUpdated" a TODOS los clientes SignalR.
-///      d. Al finalizar emite "ExecutionCompletedToast" a TODOS los clientes SignalR.
-///
-/// Nota: En Fase 1 no hay integración real con Oracle/SQL Server.
-/// La simulación usa los metadatos del JSON (processId, steps) para construir
-/// mensajes de progreso descriptivos y realistas.
+/// Servicio en segundo plano que orquesta la ejecución física de pruebas UI con Playwright
+/// o la simulación de procesos masivos, emitiendo telemetría en tiempo real hacia SignalR.
 /// </summary>
 public sealed class ExecutionBackgroundWorker : BackgroundService
 {
-    private const int ProgressTicks = 10;
+    private const int DefaultSimulationTicks = 10;
     private readonly IExecutionTaskQueue _queue;
     private readonly IHubContext<TelemetryHub> _hubContext;
+    private readonly IPlaywrightCommandExecutor _playwrightExecutor;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExecutionBackgroundWorker> _logger;
     private readonly int _progressDelayMs;
 
     public ExecutionBackgroundWorker(
         IExecutionTaskQueue queue,
         IHubContext<TelemetryHub> hubContext,
+        IPlaywrightCommandExecutor playwrightExecutor,
+        IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
         ILogger<ExecutionBackgroundWorker> logger)
     {
-        _queue          = queue;
-        _hubContext     = hubContext;
-        _logger         = logger;
-        _progressDelayMs = configuration.GetValue<int>("Orchestration:SimulatedProgressDelayMs", 500);
+        _queue             = queue;
+        _hubContext        = hubContext;
+        _playwrightExecutor = playwrightExecutor;
+        _scopeFactory      = scopeFactory;
+        _logger            = logger;
+        _progressDelayMs   = configuration.GetValue<int>("Orchestration:SimulatedProgressDelayMs", 500);
     }
 
-    /// <summary>
-    /// Bucle principal del BackgroundService.
-    /// Se cancela automáticamente cuando el host envía la señal de shutdown (Ctrl+C / ACA stop).
-    /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation(
-            "[ExecutionBackgroundWorker] Worker iniciado. Escuchando tareas en el Channel...");
+        _logger.LogInformation("[ExecutionBackgroundWorker] Worker iniciado. Escuchando tareas en el Channel...");
 
-        // El bucle se repite indefinidamente hasta que stoppingToken sea cancelado
         while (!stoppingToken.IsCancellationRequested)
         {
             ExecutionTask? task = null;
 
             try
             {
-                // Se bloquea asincrónicamente hasta que llegue una tarea o se cancele el host
                 task = await _queue.DequeueAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
-                // Shutdown graceful del host — salimos del bucle limpiamente
-                _logger.LogInformation(
-                    "[ExecutionBackgroundWorker] Shutdown solicitado. Deteniendo worker.");
+                _logger.LogInformation("[ExecutionBackgroundWorker] Shutdown solicitado. Deteniendo worker.");
                 break;
             }
 
-            // Procesar la tarea fuera del try-catch del token para capturar errores reales
-            await ProcessExecutionTaskAsync(task, stoppingToken);
+            if (task != null)
+            {
+                await ProcessExecutionTaskAsync(task, stoppingToken);
+            }
         }
 
         _logger.LogInformation("[ExecutionBackgroundWorker] Worker detenido.");
     }
 
-    /// <summary>
-    /// Procesa una única tarea de ejecución: simula el progreso y emite eventos SignalR.
-    /// </summary>
     private async Task ProcessExecutionTaskAsync(ExecutionTask task, CancellationToken stoppingToken)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -91,64 +81,122 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
             task.ExecutionId,
             (DateTimeOffset.UtcNow - task.EnqueuedAt).TotalMilliseconds);
 
-        // Extraer metadatos del JSON para construir mensajes descriptivos
         var suiteMetadata = ExtractSuiteMetadata(task.SuiteConfigJson);
+        var uiCommands = ExtractUiCommands(task.SuiteConfigJson);
 
         try
         {
-            // ── BUCLE DE PROGRESO: 10 ticks de 10% ───────────────────────────────
-            for (int tick = 1; tick <= ProgressTicks; tick++)
+            if (uiCommands.Count > 0)
             {
-                if (stoppingToken.IsCancellationRequested) break;
-
-                // Esperar el delay simulado
-                await Task.Delay(_progressDelayMs, stoppingToken);
-
-                var percentage  = tick * (100 / ProgressTicks);
-                var description = BuildProgressDescription(tick, ProgressTicks, suiteMetadata);
-
+                // ── EJECUCIÓN FÍSICA CON PLAYWRIGHT (UI_SEQUENCE) ────────────────────
                 _logger.LogInformation(
-                    "[ExecutionBackgroundWorker] Progreso {Pct}% | ExecutionId: {Id} | Paso: {Desc}",
-                    percentage, task.ExecutionId, description);
+                    "[ExecutionBackgroundWorker] Detectada acción UI_SEQUENCE con {Count} comandos Playwright. Iniciando motor de automatización...",
+                    uiCommands.Count);
 
-                // ── EMITIR EVENTO SignalR → "ExecutionProgressUpdated" ──────────
-                await _hubContext.Clients.All.SendAsync(
-                    "ExecutionProgressUpdated",
-                    new ProgressUpdatedPayload
+                var uiResult = await _playwrightExecutor.ExecuteSequenceAsync(
+                    task.ExecutionId.ToString(),
+                    uiCommands,
+                    async (stepIndex, total, description) =>
                     {
-                        ExecutionId          = task.ExecutionId,
-                        ProgressPercentage   = percentage,
-                        ActiveStepDescription = description
+                        var pct = (int)Math.Round((double)stepIndex / total * 100);
+                        await _hubContext.Clients.All.SendAsync(
+                            "ExecutionProgressUpdated",
+                            new ProgressUpdatedPayload
+                            {
+                                ExecutionId           = task.ExecutionId,
+                                ProgressPercentage    = pct,
+                                ActiveStepDescription = description,
+                                HasScreenshot         = false
+                            },
+                            stoppingToken);
+                    },
+                    stoppingToken);
+
+                stopwatch.Stop();
+
+                if (uiResult.Success)
+                {
+                    await PersistExecutionSuccessAsync(task, suiteMetadata, stopwatch.Elapsed.TotalSeconds);
+
+                    await _hubContext.Clients.All.SendAsync(
+                        "ExecutionCompletedToast",
+                        new ExecutionCompletedPayload
+                        {
+                            ExecutionId     = task.ExecutionId,
+                            FinalStatus     = "COMPLETED_SUCCESS",
+                            Message         = $"Secuencia UI Playwright '{suiteMetadata.Application}' completada exitosamente ({uiResult.TotalCommands} comandos ejecutados).",
+                            DurationSeconds = stopwatch.Elapsed.TotalSeconds,
+                            HasScreenshot   = false
+                        },
+                        stoppingToken);
+                }
+                else
+                {
+                    // Fallo en UI: Guardar inconsistencia con evidencia Base64 y emitir Toast
+                    var inconsistencyId = $"INC-UI-{task.ExecutionId.ToString()[..8].ToUpperInvariant()}";
+
+                    await PersistUiFailureAsync(task, suiteMetadata, uiResult, inconsistencyId);
+
+                    await _hubContext.Clients.All.SendAsync(
+                        "ExecutionCompletedToast",
+                        new ExecutionCompletedPayload
+                        {
+                            ExecutionId     = task.ExecutionId,
+                            FinalStatus     = "FAILED",
+                            Message         = $"Fallo en automatización UI '{suiteMetadata.Application}': {uiResult.ErrorMessage}",
+                            DurationSeconds = stopwatch.Elapsed.TotalSeconds,
+                            HasScreenshot   = uiResult.HasScreenshot,
+                            InconsistencyId = inconsistencyId
+                        },
+                        stoppingToken);
+                }
+            }
+            else
+            {
+                // ── MODO SIMULACIÓN PROGRESIVA (Procesos masivos / Conciliaciones) ──
+                for (int tick = 1; tick <= DefaultSimulationTicks; tick++)
+                {
+                    if (stoppingToken.IsCancellationRequested) break;
+
+                    await Task.Delay(_progressDelayMs, stoppingToken);
+
+                    var percentage  = tick * (100 / DefaultSimulationTicks);
+                    var description = BuildProgressDescription(tick, DefaultSimulationTicks, suiteMetadata);
+
+                    await _hubContext.Clients.All.SendAsync(
+                        "ExecutionProgressUpdated",
+                        new ProgressUpdatedPayload
+                        {
+                            ExecutionId           = task.ExecutionId,
+                            ProgressPercentage    = percentage,
+                            ActiveStepDescription = description,
+                            HasScreenshot         = false
+                        },
+                        stoppingToken);
+                }
+
+                stopwatch.Stop();
+                await PersistExecutionSuccessAsync(task, suiteMetadata, stopwatch.Elapsed.TotalSeconds);
+
+                var completionMessage = $"Ejecución '{suiteMetadata.Application}' completada. " +
+                                        $"{suiteMetadata.TotalSteps:N0} pasos procesados en {suiteMetadata.ProcessCount} proceso(s). " +
+                                        $"Tenant: {suiteMetadata.Tenant}";
+
+                await _hubContext.Clients.All.SendAsync(
+                    "ExecutionCompletedToast",
+                    new ExecutionCompletedPayload
+                    {
+                        ExecutionId     = task.ExecutionId,
+                        FinalStatus     = "COMPLETED_SUCCESS",
+                        Message         = completionMessage,
+                        DurationSeconds = stopwatch.Elapsed.TotalSeconds,
+                        HasScreenshot   = false
                     },
                     stoppingToken);
             }
-
-            stopwatch.Stop();
-
-            var completionMessage = $"Ejecución '{suiteMetadata.Application}' completada. " +
-                                    $"{suiteMetadata.TotalSteps:N0} pasos procesados en {suiteMetadata.ProcessCount} proceso(s). " +
-                                    $"Tenant: {suiteMetadata.Tenant}";
-
-            _logger.LogInformation(
-                "[ExecutionBackgroundWorker] Ejecución completada. ExecutionId: {Id} | Duración: {Dur}s",
-                task.ExecutionId,
-                stopwatch.Elapsed.TotalSeconds);
-
-            // ── EMITIR EVENTO SignalR → "ExecutionCompletedToast" ──────────────
-            await _hubContext.Clients.All.SendAsync(
-                "ExecutionCompletedToast",
-                new ExecutionCompletedPayload
-                {
-                    ExecutionId     = task.ExecutionId,
-                    FinalStatus     = "COMPLETED_SUCCESS",
-                    Message         = completionMessage,
-                    DurationSeconds = stopwatch.Elapsed.TotalSeconds
-                },
-                stoppingToken);
         }
         catch (OperationCanceledException)
         {
-            // Shutdown durante el procesamiento — no es un error real
             _logger.LogWarning(
                 "[ExecutionBackgroundWorker] Ejecución interrumpida por shutdown. ExecutionId: {Id}",
                 task.ExecutionId);
@@ -157,30 +205,139 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
         {
             stopwatch.Stop();
             _logger.LogError(ex,
-                "[ExecutionBackgroundWorker] Error durante el procesamiento. ExecutionId: {Id}",
+                "[ExecutionBackgroundWorker] Error general durante el procesamiento. ExecutionId: {Id}",
                 task.ExecutionId);
 
-            // Notificar al frontend del fallo para que muestre un Toast de error
             await _hubContext.Clients.All.SendAsync(
                 "ExecutionCompletedToast",
                 new ExecutionCompletedPayload
                 {
                     ExecutionId     = task.ExecutionId,
                     FinalStatus     = "FAILED",
-                    Message         = $"Error en la ejecución '{suiteMetadata.Application}': {ex.Message}",
-                    DurationSeconds = stopwatch.Elapsed.TotalSeconds
+                    Message         = $"Error crítico en ejecución '{suiteMetadata.Application}': {ex.Message}",
+                    DurationSeconds = stopwatch.Elapsed.TotalSeconds,
+                    HasScreenshot   = false
                 },
-                CancellationToken.None); // No usar stoppingToken aquí para asegurar la notificación de error
+                CancellationToken.None);
         }
     }
 
-    /// <summary>
-    /// Construye el texto descriptivo del paso activo para el evento de progreso.
-    /// Usa los metadatos del JSON para hacerlo lo más realista posible.
-    /// </summary>
+    private async Task PersistExecutionSuccessAsync(ExecutionTask task, SuiteMetadata meta, double durationSec)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tenantService = scope.ServiceProvider.GetRequiredService<ITenantService>();
+
+        tenantService.SetTenant(meta.Tenant);
+
+        var execution = new ExecutionEntity
+        {
+            ExecutionId = task.ExecutionId.ToString(),
+            ProcessId = meta.ProcessIds.FirstOrDefault() ?? "PRC-DEFAULT",
+            Status = "COMPLETED_SUCCESS",
+            ConsistencyPercentage = 100.00m,
+            TotalTransactions = meta.TotalSteps * 1000,
+            CreatedAt = task.EnqueuedAt,
+            CompletedAt = DateTimeOffset.UtcNow,
+            TenantId = meta.Tenant
+        };
+
+        context.Executions.Add(execution);
+        await context.SaveChangesAsync();
+    }
+
+    private async Task PersistUiFailureAsync(
+        ExecutionTask task,
+        SuiteMetadata meta,
+        UiExecutionResult uiResult,
+        string inconsistencyId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tenantService = scope.ServiceProvider.GetRequiredService<ITenantService>();
+
+        tenantService.SetTenant(meta.Tenant);
+
+        var execution = new ExecutionEntity
+        {
+            ExecutionId = task.ExecutionId.ToString(),
+            ProcessId = meta.ProcessIds.FirstOrDefault() ?? "PRC-UI-AUTOMATION",
+            Status = "FAILED",
+            ConsistencyPercentage = 0.00m,
+            TotalTransactions = uiResult.TotalCommands,
+            CreatedAt = task.EnqueuedAt,
+            CompletedAt = DateTimeOffset.UtcNow,
+            TenantId = meta.Tenant
+        };
+
+        var inconsistency = new InconsistencyEntity
+        {
+            InconsistencyId = inconsistencyId,
+            ExecutionId = execution.ExecutionId,
+            Component = "PLAYWRIGHT_CHROMIUM_ENGINE",
+            MonetaryImpact = 0.00m,
+            FieldAffected = uiResult.FailedCommand?.Selector ?? uiResult.FailedCommand?.Url ?? "DOM_ELEMENT",
+            SuggestedTag = "ERROR_UI_PLAYWRIGHT",
+            Description = $"Fallo en comando '{uiResult.FailedCommand?.CommandType}': {uiResult.ErrorMessage}",
+            ExpectedValueJson = JsonSerializer.Serialize(uiResult.FailedCommand),
+            ActualValueJson = JsonSerializer.Serialize(new { error = uiResult.ErrorMessage, step = uiResult.ExecutedCommandsCount }),
+            DetectedAt = DateTimeOffset.UtcNow,
+            TenantId = meta.Tenant,
+            HasScreenshot = uiResult.HasScreenshot,
+            // ── Persistencia y Carga Perezosa: Solo se almacena en BD, no en WebSocket ──
+            ScreenshotBase64 = uiResult.ScreenshotBase64
+        };
+
+        context.Executions.Add(execution);
+        context.Inconsistencies.Add(inconsistency);
+        await context.SaveChangesAsync();
+    }
+
+    private static List<UiCommandDto> ExtractUiCommands(string suiteConfigJson)
+    {
+        var list = new List<UiCommandDto>();
+        try
+        {
+            using var doc = JsonDocument.Parse(suiteConfigJson);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("processes", out var processes) && processes.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var process in processes.EnumerateArray())
+                {
+                    if (process.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var step in steps.EnumerateArray())
+                        {
+                            var actionType = step.TryGetProperty("actionType", out var at) ? at.GetString() : null;
+                            if (string.Equals(actionType, "UI_SEQUENCE", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (step.TryGetProperty("payload", out var payload) &&
+                                    payload.TryGetProperty("uiCommands", out var commands) &&
+                                    commands.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var cmd in commands.EnumerateArray())
+                                    {
+                                        var dto = JsonSerializer.Deserialize<UiCommandDto>(cmd.GetRawText());
+                                        if (dto != null) list.Add(dto);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignorar errores de parsing si no contiene comandos válidos
+        }
+
+        return list;
+    }
+
     private static string BuildProgressDescription(int tick, int totalTicks, SuiteMetadata meta)
     {
-        // Distribuye los ticks entre los procesos de la suite de forma proporcional
         var processIndex = Math.Min(
             (int)Math.Floor((tick - 1.0) / totalTicks * meta.ProcessCount),
             meta.ProcessCount - 1);
@@ -200,10 +357,6 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
         };
     }
 
-    /// <summary>
-    /// Extrae metadatos básicos del JSON de la suite para enriquecer los mensajes de progreso.
-    /// Si el JSON es inválido o está vacío, retorna valores por defecto para no interrumpir el flujo.
-    /// </summary>
     private SuiteMetadata ExtractSuiteMetadata(string suiteConfigJson)
     {
         try
@@ -211,9 +364,9 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
             using var doc = JsonDocument.Parse(suiteConfigJson);
             var root = doc.RootElement;
 
-            var tenant      = root.TryGetProperty("tenant",      out var t) ? t.GetString() ?? "N/A" : "N/A";
-            var environment = root.TryGetProperty("environment", out var e) ? e.GetString() ?? "N/A" : "N/A";
-            var application = root.TryGetProperty("application", out var a) ? a.GetString() ?? "N/A" : "N/A";
+            var tenant      = root.TryGetProperty("tenant",      out var t) ? t.GetString() ?? "DEFAULT_TENANT" : "DEFAULT_TENANT";
+            var environment = root.TryGetProperty("environment", out var e) ? e.GetString() ?? "DEV" : "DEV";
+            var application = root.TryGetProperty("application", out var a) ? a.GetString() ?? "Suite E2E" : "Suite E2E";
 
             var processIds = new List<string>();
             int totalSteps = 0;
@@ -241,18 +394,13 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
         catch (JsonException ex)
         {
             _logger.LogWarning(
-                "[ExecutionBackgroundWorker] No se pudo parsear el JSON de la suite para metadatos. " +
-                "Error: {Msg}. Se usarán valores por defecto.",
+                "[ExecutionBackgroundWorker] No se pudo parsear el JSON de la suite para metadatos: {Msg}",
                 ex.Message);
 
-            return new SuiteMetadata("N/A", "N/A", "Suite E2E", [], 1, 1);
+            return new SuiteMetadata("DEFAULT_TENANT", "DEV", "Suite E2E", [], 1, 1);
         }
     }
 
-    /// <summary>
-    /// Metadatos extraídos del JSON de la suite.
-    /// Record para inmutabilidad y sintaxis compacta.
-    /// </summary>
     private sealed record SuiteMetadata(
         string Tenant,
         string Environment,

@@ -35,17 +35,39 @@ RUN dotnet publish "MiTesterE2E.csproj" \
     --no-restore
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 3: RUNTIME UNIFICADO (Monolito Modular en ACA)
+# STAGE 3: RUNTIME UNIFICADO (Monolito Modular con Playwright Chromium en ACA)
 # ─────────────────────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# Usuario no-root para cumplir con políticas de seguridad de Azure Container Apps
-RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
+# Instalar dependencias nativas de Linux requeridas por Chromium Headless
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    ca-certificates \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copiar los artefactos publicados (incluyendo wwwroot con Angular)
+# Crear usuario no-root para ACA
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
+
+# Copiar los artefactos publicados
 COPY --from=backend-build --chown=appuser:appuser /app/publish .
+
+USER appuser
 
 # Puerto estándar de ACA (HTTP interno; ACA gestiona TLS/HTTPS externamente)
 EXPOSE 8080
@@ -53,5 +75,6 @@ EXPOSE 8080
 # Variables de entorno por defecto
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
 
 ENTRYPOINT ["dotnet", "MiTesterE2E.dll"]

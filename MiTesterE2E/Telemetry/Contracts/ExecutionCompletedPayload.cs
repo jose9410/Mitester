@@ -30,6 +30,16 @@ public sealed class ExecutionCompletedPayload
     public double DurationSeconds { get; init; }
 
     /// <summary>
+    /// Bandera booleana ligera que indica si existe evidencia fotográfica registrada ante fallos.
+    /// </summary>
+    public bool HasScreenshot { get; init; }
+
+    /// <summary>
+    /// Identificador de la inconsistencia creada si la corrida falló (para consulta perezosa de evidencias).
+    /// </summary>
+    public string? InconsistencyId { get; init; }
+
+    /// <summary>
     /// Timestamp UTC de finalización.
     /// </summary>
     public DateTimeOffset CompletedAt { get; init; } = DateTimeOffset.UtcNow;

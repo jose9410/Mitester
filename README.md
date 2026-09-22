@@ -98,13 +98,33 @@ El backend implementa un patrón de aislamiento de datos **Nivel 1 (Columna Disc
 
 ---
 
+## 🎭 Motor de Automatización Física UI (`UI_SEQUENCE` + Playwright)
+
+El backend integra un motor físico de pruebas de interfaz de usuario con **Chromium Headless** para procesar secuencias `UI_SEQUENCE`:
+
+1. **Comandos Soportados**:
+   - `NAVIGATE`: Carga de URLs con verificación `DOMContentLoaded`.
+   - `CLICK`: Interacción con botones y enlaces mediante selectores CSS / XPath.
+   - `FILL`: Llenado de inputs y campos de formulario.
+   - `SELECT_OPTION`: Selección de opciones en dropdowns.
+   - `WAIT_FOR_SELECTOR`: Espera explícita de visibilidad de componentes.
+   - `ASSERT_TEXT`: Verificación de valores y aserciones de negocio en el DOM.
+2. **Políticas Estrictas de Captura de Evidencias**:
+   - **Frecuencia (`ON_FAILURE_ONLY`)**: La captura se toma exclusivamente si ocurre un fallo.
+   - **Compresión JPEG (75%)**: Límite estricto de tamaño $\le 250\text{ KB}$ por captura.
+   - **Desacople de SignalR**: Se envía únicamente la bandera booleana `hasScreenshot: true` por WebSocket para no saturar el canal de telemetría.
+   - **Persistencia & Carga Perezosa (Lazy Loading)**: La imagen Base64 se guarda en `InconsistencyEntity` y solo se entrega al frontend cuando el usuario abre el Triage Drawer vía `GET /api/v1/triage/logs/{inconsistencyId}`.
+
+---
+
 ## 📋 Endpoints de la API Backend
 
 | Método | Endpoint | Código HTTP | Descripción |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/v1/orchestration/validate-schema` | `200 OK` | Valida un JSON de suite contra `schema-v1.1.json` devolviendo `isValid` y `validationErrors`. |
-| `POST` | `/api/v1/orchestration/executions/start` | `202 Accepted` / `400 Bad Request` | Encola la ejecución de una suite tras validar su schema y retorna el `executionId`. |
-| `WS` | `/hubs/telemetry` | `101 Switching Protocols` | Conexión WebSocket para telemetría en tiempo real. |
+| `POST` | `/api/v1/orchestration/executions/start` | `202 Accepted` / `400 Bad Request` | Encola la ejecución de una suite (`UI_SEQUENCE`, SQL o masiva) y retorna el `executionId`. |
+| `WS` | `/hubs/telemetry` | `101 Switching Protocols` | Conexión WebSocket para telemetría en tiempo real (`hasScreenshot: bool`). |
+| `GET` | `/api/v1/triage/logs/{inconsistencyId}` | `200 OK` / `404 Not Found` | **Lazy Loading**: Retorna logs contextuales y captura de pantalla Base64 de la inconsistencia. |
 | `GET` | `/api/v1/scorecarddata/metrics` | `200 OK` | Métricas del Scorecard filtradas automáticamente por el `TenantId` activo. |
 | `GET` | `/api/v1/scorecarddata/inconsistencies` | `200 OK` | Lista de discrepancias e inconsistencias del tenant actual. |
 | `GET` | `/api/v1/scorecarddata/executions` | `200 OK` | Historial de ejecuciones E2E del tenant actual. |
