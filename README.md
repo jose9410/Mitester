@@ -137,7 +137,26 @@ El backend integra un conector físico de datos de alto rendimiento optimizado p
 
 ---
 
-| Método | Endpoint | Código HTTP | Descripción |
+## 📡 Capa de Observabilidad y Telemetría Distribuida (OpenTelemetry & Azure Monitor)
+
+El backend incorpora trazabilidad y métricas de observabilidad bajo el estándar **OpenTelemetry**:
+
+1. **Trazado Distribuido (`ActivitySource: "MiTesterE2E.Orchestration"`)**:
+   - Spans de orquestación para cada etapa: `ExecuteTestSuite`, `ProcessAction:UI_SEQUENCE`, `ProcessAction:DATA_COMPARE` y `ProcessAction:ASSERT_BUSINESS_RULES`.
+   - Spans por cada lote de 50,000 registros (`ProcessBatchChunk`) con metadatos contextuales (`tenant.id`, `execution.id`, `records.processed`, `discrepancies.count`).
+   - Muestreo al **100% (`AlwaysOnSampler`)** para certificación total bancaria (~30 spans por 1.5M registros).
+2. **Métricas de Negocio y Rendimiento (`Meter: "MiTesterE2E.Metrics"`)**:
+   - `mitester.transactions.processed_total` (`Counter<long>`): Total acumulado de transacciones conciliadas.
+   - `mitester.execution.duration_ms` (`Histogram<double>`): Latencia de scripts SQL y comandos UI Playwright.
+   - `mitester.inconsistencies.detected_total` (`Counter<long>`): Discrepancias detectadas categorizadas por tipo (`Monetary`, `Structural`, `UI`).
+   - `mitester.reconciliation.consistency_pct` (`Histogram<double>`): Porcentaje de consistencia alcanzado.
+3. **Exportación Dual Cloud-Ready (Azure Monitor / OTLP / Console)**:
+   - Integración nativa con **Azure Application Insights** mediante `Azure.Monitor.OpenTelemetry.AspNetCore` activado automáticamente si `APPLICATIONINSIGHTS_CONNECTION_STRING` está presente en **Azure Container Apps (ACA)**.
+   - Fallback automático a consola local y **OTLP Exporter** (`OTEL_EXPORTER_OTLP_ENDPOINT`) en entornos de desarrollo.
+
+---
+
+## 📋 Endpoints de la API Backend
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/v1/orchestration/validate-schema` | `200 OK` | Valida un JSON de suite contra `schema-v1.1.json` devolviendo `isValid` y `validationErrors`. |
 | `POST` | `/api/v1/orchestration/executions/start` | `202 Accepted` / `400 Bad Request` | Encola la ejecución de una suite (`UI_SEQUENCE`, SQL o masiva) y retorna el `executionId`. |

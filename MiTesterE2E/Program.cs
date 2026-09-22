@@ -1,4 +1,9 @@
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using MiTesterE2E.Automation.Services;
 using MiTesterE2E.Data.Services;
 using MiTesterE2E.Orchestration.Services;
@@ -7,8 +12,85 @@ using MiTesterE2E.Persistence.Context;
 using MiTesterE2E.Persistence.Multitenancy;
 using MiTesterE2E.Persistence.Seeding;
 using MiTesterE2E.Telemetry;
+using MiTesterE2E.Telemetry.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 0. OBSERVABILIDAD Y TELEMETRÍA DISTRIBUIDA (OpenTelemetry & Azure Monitor)
+// ─────────────────────────────────────────────────────────────────────────────
+var appInsightsConnString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
+    ?? builder.Configuration["ApplicationInsights:ConnectionString"];
+
+var otelEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
+    ?? builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+
+var otelBuilder = builder.Services.AddOpenTelemetry();
+
+otelBuilder.ConfigureResource(resource => resource
+    .AddService(serviceName: AppTelemetry.ServiceName, serviceVersion: AppTelemetry.ServiceVersion));
+
+// Activación condicional de Azure Monitor para Azure Container Apps (ACA)
+if (!string.IsNullOrWhiteSpace(appInsightsConnString))
+{
+    otelBuilder.UseAzureMonitor(options =>
+    {
+        options.ConnectionString = appInsightsConnString;
+    });
+}
+
+otelBuilder.WithTracing(tracing =>
+{
+    tracing
+        .AddSource(AppTelemetry.ActivitySourceName)
+        .AddAspNetCoreInstrumentation(options =>
+        {
+            options.RecordException = true;
+        })
+        .AddHttpClientInstrumentation(options =>
+        {
+            options.RecordException = true;
+        })
+        .SetSampler(new AlwaysOnSampler()); // Muestreo al 100% para certificación bancaria
+
+    // Fallback a consola y OTLP en desarrollo local si no hay credenciales de Azure
+    if (string.IsNullOrWhiteSpace(appInsightsConnString))
+    {
+        tracing.AddConsoleExporter();
+        if (!string.IsNullOrWhiteSpace(otelEndpoint))
+        {
+            tracing.AddOtlpExporter(opt => opt.Endpoint = new Uri(otelEndpoint));
+        }
+    }
+});
+
+otelBuilder.WithMetrics(metrics =>
+{
+    metrics
+        .AddMeter(AppTelemetry.MeterName)
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation();
+
+    if (string.IsNullOrWhiteSpace(appInsightsConnString))
+    {
+        metrics.AddConsoleExporter();
+        if (!string.IsNullOrWhiteSpace(otelEndpoint))
+        {
+            metrics.AddOtlpExporter(opt => opt.Endpoint = new Uri(otelEndpoint));
+        }
+    }
+});
+
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes = true;
+    if (string.IsNullOrWhiteSpace(appInsightsConnString))
+    {
+        logging.AddConsoleExporter();
+    }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CONTROLADORES Y SWAGGER

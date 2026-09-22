@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MiTesterE2E.Automation.Contracts;
+using MiTesterE2E.Telemetry.Observability;
 
 namespace MiTesterE2E.Automation.Services;
 
@@ -30,6 +31,10 @@ public class PlaywrightCommandExecutor : IPlaywrightCommandExecutor
         Func<int, int, string, Task>? onProgressCallback = null,
         CancellationToken cancellationToken = default)
     {
+        using var sequenceActivity = AppTelemetry.ActivitySource.StartActivity("ExecutePlaywrightSequence", ActivityKind.Internal);
+        sequenceActivity?.SetTag("execution.id", executionId);
+        sequenceActivity?.SetTag("ui.total_commands", commands.Count);
+
         var stopwatch = Stopwatch.StartNew();
         var result = new UiExecutionResult
         {
@@ -56,6 +61,12 @@ public class PlaywrightCommandExecutor : IPlaywrightCommandExecutor
             var cmd = commands[i];
             var stepIndex = i + 1;
             var stepDesc = GetCommandDescription(cmd, stepIndex, commands.Count);
+
+            using var stepActivity = AppTelemetry.ActivitySource.StartActivity("ExecutePlaywrightCommand", ActivityKind.Internal);
+            stepActivity?.SetTag("ui.step_index", stepIndex);
+            stepActivity?.SetTag("ui.command_type", cmd.CommandType);
+            stepActivity?.SetTag("ui.selector", cmd.Selector);
+            stepActivity?.SetTag("ui.url", cmd.Url);
 
             _logger.LogInformation(
                 "[PlaywrightExecutor] [{Step}/{Total}] Ejecutando: {Desc}",

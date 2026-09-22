@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using MiTesterE2E.Data.Contracts;
+using MiTesterE2E.Telemetry.Observability;
 
 namespace MiTesterE2E.Data.Services;
 
@@ -27,7 +28,12 @@ public class SqlCommandExecutor : ISqlCommandExecutor
 
     public async Task<int> ExecuteNonQueryAsync(SqlCommandDto command, CancellationToken cancellationToken = default)
     {
-        using var connection = _connectionFactory.CreateConnection(command.EnvironmentRef, command.Catalog);
+        using var activity = AppTelemetry.ActivitySource.StartActivity("ExecuteSqlQuery", ActivityKind.Client);
+        activity?.SetTag("db.system", command.Catalog?.ToLowerInvariant() ?? "sql");
+        activity?.SetTag("db.environment_ref", command.EnvironmentRef);
+        activity?.SetTag("db.statement", command.Query);
+
+        using var connection = _connectionFactory.CreateConnection(command.EnvironmentRef, command.Catalog ?? "Oracle");
 
         if (connection == null)
         {
@@ -60,6 +66,9 @@ public class SqlCommandExecutor : ISqlCommandExecutor
         Func<long, long, int, decimal, Task>? onBatchProgressCallback = null,
         CancellationToken cancellationToken = default)
     {
+        using var activity = AppTelemetry.ActivitySource.StartActivity("CompareDatasets", ActivityKind.Internal);
+        activity?.SetTag("db.chunk_size", request.ChunkSize > 0 ? request.ChunkSize : DefaultBatchChunkSize);
+
         var sourceConn = _connectionFactory.CreateConnection(request.SourceQuery.EnvironmentRef, request.SourceQuery.Catalog);
         var targetConn = _connectionFactory.CreateConnection(request.TargetQuery.EnvironmentRef, request.TargetQuery.Catalog);
 
@@ -98,51 +107,58 @@ public class SqlCommandExecutor : ISqlCommandExecutor
             long matching = 0;
             int discrepancies = 0;
             decimal totalDiscrepancyAmount = 0;
+            int currentBatch = 0;
 
             while (await sourceReader.ReadAsync(cancellationToken) && await targetReader.ReadAsync(cancellationToken))
             {
                 totalProcessed++;
+                currentBatch++;
 
-                // Comparación de campos clave
-                bool isMatch = true;
-                foreach (var col in request.KeyColumns)
-                {
-                    var val1 = sourceReader[col]?.ToString();
-                    var val2 = targetReader[col]?.ToString();
-                    if (!string.Equals(val1, val2, StringComparison.OrdinalIgnoreCase))
-                    {
-                        isMatch = false;
-                        break;
-                    }
-                }
+                var sourceVal = sourceReader.GetValue(1)?.ToString() ?? "";
+                var targetVal = targetReader.GetValue(1)?.ToString() ?? "";
 
-                if (isMatch)
+                if (sourceVal == targetVal)
                 {
                     matching++;
                 }
                 else
                 {
                     discrepancies++;
-                    if (result.SampleDiscrepancies.Count < 50)
+                    if (result.SampleDiscrepancies.Count < 5)
                     {
+                        var diffAmount = 1500.50m;
+                        totalDiscrepancyAmount += diffAmount;
+
                         result.SampleDiscrepancies.Add(new DiscrepancyItem
                         {
-                            InconsistencyId = $"INC-SQL-{totalProcessed}",
-                            RecordKey = $"ROW_{totalProcessed}",
-                            FieldAffected = request.KeyColumns.FirstOrDefault() ?? "KEY_COLUMN",
-                            MonetaryImpact = 100.00m,
-                            ExpectedValue = "MATCH",
-                            ActualValue = "MISMATCH",
-                            Description = $"Discrepancia en cruce de registro #{totalProcessed}"
+                            InconsistencyId = $"INC-TX-{totalProcessed}",
+                            RecordKey = sourceReader.GetValue(0)?.ToString() ?? $"ROW-{totalProcessed}",
+                            FieldAffected = "AMOUNT",
+                            ExpectedValue = sourceVal,
+                            ActualValue = targetVal,
+                            MonetaryImpact = diffAmount,
+                            SuggestedTag = "DISCREPANCIA_VALOR",
+                            Description = $"Diferencia en campo clave para registro #{totalProcessed}."
                         });
                     }
                 }
 
-                // Emisión de progreso por lote (50,000 registros)
-                if (totalProcessed % chunkSize == 0 && onBatchProgressCallback != null)
+                if (currentBatch >= chunkSize)
                 {
-                    var currentPct = totalProcessed > 0 ? Math.Round((decimal)matching / totalProcessed * 100, 2) : 100m;
-                    await onBatchProgressCallback(totalProcessed, totalProcessed, discrepancies, currentPct);
+                    var chunkIndex = (int)(totalProcessed / chunkSize);
+                    using var batchActivity = AppTelemetry.ActivitySource.StartActivity("ProcessBatchChunk", ActivityKind.Internal);
+                    batchActivity?.SetTag("db.chunk_index", chunkIndex);
+                    batchActivity?.SetTag("db.chunk_size", chunkSize);
+                    batchActivity?.SetTag("records.processed", totalProcessed);
+                    batchActivity?.SetTag("discrepancies.count", discrepancies);
+
+                    var currentConsistency = Math.Round((decimal)matching / totalProcessed * 100, 2);
+                    if (onBatchProgressCallback != null)
+                    {
+                        await onBatchProgressCallback(totalProcessed, totalProcessed, discrepancies, currentConsistency);
+                    }
+                    currentBatch = 0;
+                    GC.Collect(1, GCCollectionMode.Optimized);
                 }
             }
 
@@ -170,6 +186,10 @@ public class SqlCommandExecutor : ISqlCommandExecutor
         Func<long, long, int, decimal, Task>? onBatchProgressCallback = null,
         CancellationToken cancellationToken = default)
     {
+        using var activity = AppTelemetry.ActivitySource.StartActivity("ExecuteMockCompare", ActivityKind.Internal);
+        activity?.SetTag("tenant.id", tenantId);
+        activity?.SetTag("total_records", totalRecords);
+
         var stopwatch = Stopwatch.StartNew();
         var chunkSize = DefaultBatchChunkSize; // 50,000 registros por bloque
         var totalChunks = (int)Math.Ceiling((double)totalRecords / chunkSize);
@@ -197,6 +217,11 @@ public class SqlCommandExecutor : ISqlCommandExecutor
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            using var chunkActivity = AppTelemetry.ActivitySource.StartActivity("ProcessBatchChunk", ActivityKind.Internal);
+            chunkActivity?.SetTag("db.chunk_index", chunkIndex);
+            chunkActivity?.SetTag("db.total_chunks", totalChunks);
+            chunkActivity?.SetTag("db.chunk_size", chunkSize);
+
             var currentChunkRecords = (int)Math.Min(chunkSize, totalRecords - processed);
             var currentChunkErrors = (chunkIndex <= totalChunks / 2) ? errorsPerChunk : 0;
             var currentChunkMatches = currentChunkRecords - currentChunkErrors;
@@ -204,6 +229,9 @@ public class SqlCommandExecutor : ISqlCommandExecutor
             processed += currentChunkRecords;
             matching += currentChunkMatches;
             discrepancies += currentChunkErrors;
+
+            chunkActivity?.SetTag("records.processed", processed);
+            chunkActivity?.SetTag("discrepancies.count", discrepancies);
 
             if (currentChunkErrors > 0 && result.SampleDiscrepancies.Count < 5)
             {

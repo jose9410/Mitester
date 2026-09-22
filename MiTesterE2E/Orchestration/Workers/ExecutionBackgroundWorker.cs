@@ -14,6 +14,7 @@ using MiTesterE2E.Persistence.Entities;
 using MiTesterE2E.Persistence.Multitenancy;
 using MiTesterE2E.Telemetry;
 using MiTesterE2E.Telemetry.Contracts;
+using MiTesterE2E.Telemetry.Observability;
 
 namespace MiTesterE2E.Orchestration.Workers;
 
@@ -75,23 +76,36 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
 
     private async Task ProcessExecutionTaskAsync(ExecutionTask task, CancellationToken stoppingToken)
     {
+        using var rootActivity = AppTelemetry.ActivitySource.StartActivity("ExecuteTestSuite", ActivityKind.Internal);
         var stopwatch = Stopwatch.StartNew();
-
-        _logger.LogInformation(
-            "[ExecutionBackgroundWorker] Procesando tarea. ExecutionId: {Id} | Encolada hace: {Lag}ms",
-            task.ExecutionId,
-            (DateTimeOffset.UtcNow - task.EnqueuedAt).TotalMilliseconds);
 
         var suiteMetadata = ExtractSuiteMetadata(task.SuiteConfigJson);
         var uiCommands = ExtractUiCommands(task.SuiteConfigJson);
         var sqlCommands = ExtractSqlCommands(task.SuiteConfigJson);
         var assertionRules = ExtractBusinessRules(task.SuiteConfigJson);
 
+        rootActivity?.SetTag("tenant.id", suiteMetadata.Tenant);
+        rootActivity?.SetTag("execution.id", task.ExecutionId.ToString());
+        rootActivity?.SetTag("suite.application", suiteMetadata.Application);
+        rootActivity?.SetTag("suite.environment", suiteMetadata.Environment);
+        rootActivity?.SetTag("suite.tenant", suiteMetadata.Tenant);
+
+        _logger.LogInformation(
+            "[ExecutionBackgroundWorker] Procesando tarea. ExecutionId: {Id} | Tenant: {Tenant} | Encolada hace: {Lag}ms | TraceId: {TraceId}",
+            task.ExecutionId,
+            suiteMetadata.Tenant,
+            (DateTimeOffset.UtcNow - task.EnqueuedAt).TotalMilliseconds,
+            Activity.Current?.TraceId.ToString());
+
         try
         {
             if (uiCommands.Count > 0)
             {
                 // ── 1. EJECUCIÓN FÍSICA UI PLAYWRIGHT (UI_SEQUENCE) ───────────────────
+                using var uiActivity = AppTelemetry.ActivitySource.StartActivity("ProcessAction:UI_SEQUENCE", ActivityKind.Internal);
+                uiActivity?.SetTag("ui.commands_count", uiCommands.Count);
+                uiActivity?.SetTag("tenant.id", suiteMetadata.Tenant);
+
                 _logger.LogInformation(
                     "[ExecutionBackgroundWorker] Ejecutando UI_SEQUENCE ({Count} comandos Playwright)...",
                     uiCommands.Count);
@@ -117,6 +131,13 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
 
                 stopwatch.Stop();
 
+                // Registrar métrica de duración de ejecución UI
+                AppTelemetry.ExecutionDurationHistogram.Record(
+                    stopwatch.ElapsedMilliseconds,
+                    new KeyValuePair<string, object?>("action.type", "UI_SEQUENCE"),
+                    new KeyValuePair<string, object?>("tenant.id", suiteMetadata.Tenant),
+                    new KeyValuePair<string, object?>("status", uiResult.Success ? "SUCCESS" : "FAILED"));
+
                 if (uiResult.Success)
                 {
                     await PersistExecutionSuccessAsync(task, suiteMetadata, 100.00m, uiCommands.Count, stopwatch.Elapsed.TotalSeconds);
@@ -135,6 +156,12 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
                 }
                 else
                 {
+                    // Registrar métrica de inconsistencia UI detectada
+                    AppTelemetry.InconsistenciesCounter.Add(
+                        1,
+                        new KeyValuePair<string, object?>("type", "UI"),
+                        new KeyValuePair<string, object?>("tenant.id", suiteMetadata.Tenant));
+
                     var inconsistencyId = $"INC-UI-{task.ExecutionId.ToString()[..8].ToUpperInvariant()}";
                     await PersistUiFailureAsync(task, suiteMetadata, uiResult, inconsistencyId);
 
@@ -155,11 +182,16 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
             else
             {
                 // ── 2. EJECUCIÓN Y CONCILIACIÓN MASIVA SQL (SQL_EXECUTE / DATA_COMPARE) ─
-                _logger.LogInformation(
-                    "[ExecutionBackgroundWorker] Iniciando conciliación masiva SQL en streaming (Lotes de 50k registros)...");
-
+                using var compareActivity = AppTelemetry.ActivitySource.StartActivity("ProcessAction:DATA_COMPARE", ActivityKind.Internal);
                 long totalVolume = suiteMetadata.TotalSteps >= 10 ? 1_500_000 : 1_500_000;
                 decimal targetConsistency = 99.12m; // Discrepancias bancarias realistas
+
+                compareActivity?.SetTag("tenant.id", suiteMetadata.Tenant);
+                compareActivity?.SetTag("db.total_volume", totalVolume);
+                compareActivity?.SetTag("db.chunk_size", 50000);
+
+                _logger.LogInformation(
+                    "[ExecutionBackgroundWorker] Iniciando conciliación masiva SQL en streaming (Lotes de 50k registros)...");
 
                 var compareResult = await _sqlExecutor.ExecuteMockCompareAsync(
                     suiteMetadata.Tenant,
@@ -185,10 +217,37 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
 
                 stopwatch.Stop();
 
+                // Registrar métricas de negocio OpenTelemetry
+                AppTelemetry.TransactionsProcessedCounter.Add(
+                    compareResult.TotalRecordsProcessed,
+                    new KeyValuePair<string, object?>("tenant.id", suiteMetadata.Tenant),
+                    new KeyValuePair<string, object?>("action.type", "DATA_COMPARE"));
+
+                AppTelemetry.ExecutionDurationHistogram.Record(
+                    stopwatch.ElapsedMilliseconds,
+                    new KeyValuePair<string, object?>("action.type", "DATA_COMPARE"),
+                    new KeyValuePair<string, object?>("tenant.id", suiteMetadata.Tenant));
+
+                AppTelemetry.ConsistencyPctHistogram.Record(
+                    (double)compareResult.ConsistencyPercentage,
+                    new KeyValuePair<string, object?>("tenant.id", suiteMetadata.Tenant));
+
+                if (compareResult.DiscrepanciesCount > 0)
+                {
+                    AppTelemetry.InconsistenciesCounter.Add(
+                        compareResult.DiscrepanciesCount,
+                        new KeyValuePair<string, object?>("type", "Monetary"),
+                        new KeyValuePair<string, object?>("tenant.id", suiteMetadata.Tenant));
+                }
+
                 // ── 3. EVALUACIÓN DE REGLAS DE NEGOCIO (ASSERT_BUSINESS_RULES) ────────
+                using var assertActivity = AppTelemetry.ActivitySource.StartActivity("ProcessAction:ASSERT_BUSINESS_RULES", ActivityKind.Internal);
                 var expectedThreshold = assertionRules?.ExpectedValue ?? 99.50m;
                 var assertionOp = assertionRules?.Operator ?? ">=";
                 var assertionResult = _sqlExecutor.AssertQualityRules(compareResult.ConsistencyPercentage, expectedThreshold, assertionOp);
+
+                assertActivity?.SetTag("rule.expected_threshold", expectedThreshold);
+                assertActivity?.SetTag("rule.passed", assertionResult.Passed);
 
                 _logger.LogInformation(
                     "[ExecutionBackgroundWorker] Resultado de aserción: {Msg} | ¿Superada?: {Passed}",
