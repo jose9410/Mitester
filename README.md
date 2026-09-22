@@ -117,7 +117,25 @@ El backend integra un motor físico de pruebas de interfaz de usuario con **Chro
 
 ---
 
-## 📋 Endpoints de la API Backend
+## 🗄️ Motor Físico de Ejecución SQL y Conciliación Masiva (`SQL_EXECUTE` & `DATA_COMPARE`)
+
+El backend integra un conector físico de datos de alto rendimiento optimizado para procesar grandes volúmenes de registros bancarios (hasta **1,500,000 transacciones**) sin comprometer la memoria RAM ni saturar los WebSockets:
+
+1. **Resolución Dinámica de Conexiones (`environmentRef`)**:
+   - `SqlConnectionFactory` resuelve dinámicamente la cadena de conexión leyendo `ConnectionStrings:{environmentRef}_{Engine}` (ej. `ConnectionStrings:QA_Oracle`, `ConnectionStrings:DEV_SqlServer`, `ConnectionStrings:kv-bpp-ktx-qa_Oracle`).
+   - Compatible nativamente con **Azure Container Apps (ACA)** inyectando secretos desde **Azure Key Vault**.
+2. **Procesamiento por Lotes y Streaming de Memoria (`Chunk Size: 50,000`)**:
+   - Lectura secuencial (`DbDataReader` con `CommandBehavior.SequentialAccess`) en lotes de 50,000 registros (~30 bloques para 1.5M de filas).
+   - Huella de memoria $\le 150\text{ MB}$ con recolección periódica (`GC.Collect`).
+   - `CommandTimeout` configurado en **300 segundos (5 minutos)** para tolerar consultas analíticas pesadas.
+3. **Modo Fallback / Simulación Sintética (`MockDataGenerator`)**:
+   - Generación sintética en streaming de 1.5M de registros cuando la base de datos física no está accesible o se activa `UseMockSqlData: true` en configuración.
+4. **Motor de Aserciones y Calidad (`ASSERT_BUSINESS_RULES`)**:
+   - Evaluación contra umbral de consistencia bancaria ($\ge 99.5\%$) y tolerancia monetaria (`numericTolerance`).
+   - Cálculo automático de impacto financiero no conciliado y consolidación en `ScorecardMetricsEntity`.
+   - Registro de discrepancias detalladas en `InconsistencyEntity` para triaje inmediato.
+
+---
 
 | Método | Endpoint | Código HTTP | Descripción |
 | :--- | :--- | :--- | :--- |
@@ -195,6 +213,8 @@ docker run -d -p 8080:8080 --name mitester-app mitester-fullstack:latest
     ├── Dockerfile                 # Multi-stage Dockerfile (Node + .NET -> ACA)
     ├── Orchestration/             # Controladores, canales y worker en background
     ├── Telemetry/                 # Hub de SignalR y contratos de eventos
+    ├── Persistence/               # EF Core 8, Multitenant DbContext y Entidades
+    ├── Data/                      # Conector SQL masivo, streaming por lotes y reconciliación
     └── ClientApp/                 # Capa UI (Angular 18+ Standalone & M3)
         ├── package.json           # Dependencias (@angular/material, @microsoft/signalr)
         ├── src/

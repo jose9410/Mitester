@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MiTesterE2E.Automation.Services;
+using MiTesterE2E.Data.Services;
 using MiTesterE2E.Orchestration.Services;
 using MiTesterE2E.Orchestration.Workers;
 using MiTesterE2E.Persistence.Context;
@@ -56,9 +57,11 @@ else
 builder.Services.AddSignalR();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. AUTOMATIZACIÓN Y ORQUESTACIÓN: Playwright, Channel Queue + BackgroundWorker
+// 4. AUTOMATIZACIÓN, CONECTORES SQL Y ORQUESTACIÓN
 // ─────────────────────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
+builder.Services.AddSingleton<ISqlCommandExecutor, SqlCommandExecutor>();
 builder.Services.AddSingleton<IPlaywrightCommandExecutor, PlaywrightCommandExecutor>();
 builder.Services.AddSingleton<IExecutionTaskQueue, ExecutionTaskQueue>();
 builder.Services.AddHostedService<ExecutionBackgroundWorker>();
