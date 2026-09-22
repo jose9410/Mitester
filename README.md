@@ -137,6 +137,25 @@ El backend integra un conector físico de datos de alto rendimiento optimizado p
 
 ---
 
+## 📑 Extracción Automática de Logs y Comparación de Archivos Excel/CSV
+
+El backend incorpora soporte nativo para inspeccionar artefactos en el directorio `/out/`:
+
+1. **Servicio de Extracción Automática de Logs (`FileLogExtractorService`)**:
+   - Inspecciona el directorio de salida `/out/` aplicando una **estrategia de búsqueda híbrida**:
+     - *Primaria:* Coincidencia por `executionId` (`{executionId}*.log`, `{executionId}*.txt`).
+     - *Secundario/Fallback:* Archivo de traza más reciente (`LastWriteTimeUtc`) modificado dentro de la ventana de ejecución o por nombre de aplicativo.
+   - Extrae el bloque contextual del error (últimas 25–30 líneas con excepciones o descalces).
+   - Persiste el resultado en `InconsistencyEntity.ContextualLogs` para servirlo directamente al Triage Drawer vía `GET /api/v1/triage/logs/{inconsistencyId}`.
+
+2. **Comparador Masivo de Archivos Excel y CSV (`ExcelAndCsvCompareExecutor`)**:
+   - Lectura eficiente mediante `ExcelDataReader` (archivos `.xlsx` y `.xls` con soporte `CodePagesEncodingProvider`) y `CsvHelper` (archivos `.csv`).
+   - **Autodetección de Delimitadores:** Identifica automáticamente comas (`,`), punto y coma (`;`) y tabuladores (`\t`).
+   - **Manejo Robusto de Codificación:** Lectura en `UTF-8` con fallback automático a `ISO-8859-1` / `Windows-1252` para compatibilidad con caracteres en español y reportes bancarios legados.
+   - Cruce por columnas clave (`KeyColumns`), cálculo de tolerancias numéricas y registro de discrepancias financieras en el Scorecard.
+
+---
+
 ## 📡 Capa de Observabilidad y Telemetría Distribuida (OpenTelemetry & Azure Monitor)
 
 El backend incorpora trazabilidad y métricas de observabilidad bajo el estándar **OpenTelemetry**:

@@ -55,6 +55,12 @@ public class InconsistencyEntity : ITenantEntity
     /// </summary>
     public string? ScreenshotBase64 { get; set; }
 
+    /// <summary>
+    /// Extracto contextual de trazas de logs (últimas 25-30 líneas de excepción/descalce)
+    /// extraído automáticamente desde el directorio /out/ por FileLogExtractorService.
+    /// </summary>
+    public string? ContextualLogs { get; set; }
+
     [Required]
     [MaxLength(100)]
     public string TenantId { get; set; } = string.Empty;

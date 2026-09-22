@@ -14,6 +14,9 @@
   <ItemGroup>
     <!-- Validación de JSON Schema draft-07 con soporte polimórfico allOf/if-then -->
     <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" Version="1.6.0" />
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
+    <PackageReference Include="ExcelDataReader" Version="3.9.0" />
+    <PackageReference Include="ExcelDataReader.DataSet" Version="3.9.0" />
     <PackageReference Include="NJsonSchema" Version="11.0.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.19.1" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />

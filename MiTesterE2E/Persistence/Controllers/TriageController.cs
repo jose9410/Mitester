@@ -74,7 +74,8 @@ public class TriageController : ControllerBase
             HasScreenshot      = inc.HasScreenshot,
             // ── Persistencia y Carga Perezosa: Solo se entrega al abrir el Drawer ──
             ScreenshotBase64   = inc.ScreenshotBase64,
-            ContextualLogs     = contextualTrace
+            ContextualLogs     = contextualTrace,
+            ExtractedFileLog   = inc.ContextualLogs
         });
     }
 }

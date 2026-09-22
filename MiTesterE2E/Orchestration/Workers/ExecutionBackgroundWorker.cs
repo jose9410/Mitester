@@ -28,6 +28,8 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
     private readonly IHubContext<TelemetryHub> _hubContext;
     private readonly IPlaywrightCommandExecutor _playwrightExecutor;
     private readonly ISqlCommandExecutor _sqlExecutor;
+    private readonly IExcelAndCsvCompareExecutor _fileCompareExecutor;
+    private readonly IFileLogExtractorService _logExtractor;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExecutionBackgroundWorker> _logger;
 
@@ -36,15 +38,19 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
         IHubContext<TelemetryHub> hubContext,
         IPlaywrightCommandExecutor playwrightExecutor,
         ISqlCommandExecutor sqlExecutor,
+        IExcelAndCsvCompareExecutor fileCompareExecutor,
+        IFileLogExtractorService logExtractor,
         IServiceScopeFactory scopeFactory,
         ILogger<ExecutionBackgroundWorker> logger)
     {
-        _queue             = queue;
-        _hubContext        = hubContext;
-        _playwrightExecutor = playwrightExecutor;
-        _sqlExecutor       = sqlExecutor;
-        _scopeFactory      = scopeFactory;
-        _logger            = logger;
+        _queue               = queue;
+        _hubContext          = hubContext;
+        _playwrightExecutor   = playwrightExecutor;
+        _sqlExecutor         = sqlExecutor;
+        _fileCompareExecutor = fileCompareExecutor;
+        _logExtractor        = logExtractor;
+        _scopeFactory        = scopeFactory;
+        _logger              = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -328,6 +334,9 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
         };
 
         // 2. Registro de Inconsistencias
+        var contextualLog = await _logExtractor.ExtractContextualLogAsync(
+            task.ExecutionId.ToString(), meta.Application, task.EnqueuedAt);
+
         foreach (var sample in compareResult.SampleDiscrepancies)
         {
             var inc = new InconsistencyEntity
@@ -343,7 +352,8 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
                 ActualValueJson = sample.ActualValue,
                 DetectedAt = DateTimeOffset.UtcNow,
                 TenantId = meta.Tenant,
-                HasScreenshot = false
+                HasScreenshot = false,
+                ContextualLogs = contextualLog
             };
             execution.Inconsistencies.Add(inc);
         }
@@ -410,6 +420,9 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
 
         tenantService.SetTenant(meta.Tenant);
 
+        var contextualLog = await _logExtractor.ExtractContextualLogAsync(
+            task.ExecutionId.ToString(), meta.Application, task.EnqueuedAt);
+
         var execution = new ExecutionEntity
         {
             ExecutionId = task.ExecutionId.ToString(),
@@ -436,7 +449,8 @@ public sealed class ExecutionBackgroundWorker : BackgroundService
             DetectedAt = DateTimeOffset.UtcNow,
             TenantId = meta.Tenant,
             HasScreenshot = uiResult.HasScreenshot,
-            ScreenshotBase64 = uiResult.ScreenshotBase64
+            ScreenshotBase64 = uiResult.ScreenshotBase64,
+            ContextualLogs = contextualLog
         };
 
         context.Executions.Add(execution);

@@ -139,11 +139,13 @@ else
 builder.Services.AddSignalR();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. AUTOMATIZACIÓN, CONECTORES SQL Y ORQUESTACIÓN
+// 4. AUTOMATIZACIÓN, CONECTORES SQL/EXCEL/CSV Y ORQUESTACIÓN
 // ─────────────────────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
 builder.Services.AddSingleton<ISqlCommandExecutor, SqlCommandExecutor>();
+builder.Services.AddSingleton<IExcelAndCsvCompareExecutor, ExcelAndCsvCompareExecutor>();
+builder.Services.AddSingleton<IFileLogExtractorService, FileLogExtractorService>();
 builder.Services.AddSingleton<IPlaywrightCommandExecutor, PlaywrightCommandExecutor>();
 builder.Services.AddSingleton<IExecutionTaskQueue, ExecutionTaskQueue>();
 builder.Services.AddHostedService<ExecutionBackgroundWorker>();
