@@ -1,5 +1,9 @@
+using Microsoft.EntityFrameworkCore;
 using MiTesterE2E.Orchestration.Services;
 using MiTesterE2E.Orchestration.Workers;
+using MiTesterE2E.Persistence.Context;
+using MiTesterE2E.Persistence.Multitenancy;
+using MiTesterE2E.Persistence.Seeding;
 using MiTesterE2E.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,23 +20,48 @@ builder.Services.AddSwaggerGen(options =>
         Title   = "API de Certificación \"Mi Tester E2E\"",
         Version = "v1.1.0",
         Description = "Contratos REST API para la plataforma de certificación de software bancario " +
-                      "impulsada por metadatos. Fase 1: Orquestación y Telemetría en tiempo real."
+                      "impulsada por metadatos. Persistencia Multitenant Nivel 1 (Azure SQL / Global Filters)."
     });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. SIGNALR – Telemetría en tiempo real (no requiere paquete externo en .NET 8)
+// 2. PERSISTENCIA MULTITENANT (Nivel 1: Discriminador + Global Query Filters)
+// ─────────────────────────────────────────────────────────────────────────────
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantService, TenantService>();
+
+var sqlConnectionString = builder.Configuration.GetConnectionString("AzureSql");
+if (!string.IsNullOrWhiteSpace(sqlConnectionString))
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(sqlConnectionString, sqlOptions =>
+        {
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null);
+        }));
+}
+else
+{
+    // Fallback en memoria para desarrollo ágil / pruebas locales sin Azure SQL activo
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseInMemoryDatabase("MiTesterE2E_Db"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SIGNALR – Telemetría en tiempo real
 // ─────────────────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. ORQUESTACIÓN: Cola en memoria (Channel) + BackgroundWorker
+// 4. ORQUESTACIÓN: Cola en memoria (Channel) + BackgroundWorker
 // ─────────────────────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IExecutionTaskQueue, ExecutionTaskQueue>();
 builder.Services.AddHostedService<ExecutionBackgroundWorker>();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. CORS – Permitir peticiones desde el frontend Angular (ajustar en producción)
+// 5. CORS – Permitir peticiones desde el frontend Angular
 // ─────────────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
 {
@@ -50,9 +79,12 @@ builder.Services.AddCors(options =>
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. CONSTRUCCIÓN DE LA APLICACIÓN
+// 6. CONSTRUCCIÓN DEL PIPELINE
 // ─────────────────────────────────────────────────────────────────────────────
 var app = builder.Build();
+
+// Sembrado de datos iniciales multitenant para pruebas bancarias
+await DbInitializer.SeedAsync(app.Services);
 
 if (app.Environment.IsDevelopment())
 {

@@ -74,6 +74,30 @@ Plataforma unificada para la orquestación, certificación y triaje de pruebas E
 
 ---
 
+---
+
+## 🏢 Capa de Persistencia Multitenant (Nivel 1: Azure SQL + Global Query Filters)
+
+El backend implementa un patrón de aislamiento de datos **Nivel 1 (Columna Discriminadora Compartida + Global Query Filters)** mediante **Entity Framework Core 8**:
+
+1. **Resolución de Tenant (`ITenantService` / `TenantService`)**:
+   - Resuelve el tenant activo desde `IHttpContextAccessor` con la siguiente prioridad:
+     - Header HTTP: `X-Tenant-ID`
+     - Query String: `?tenant=...`
+     - Fallback: `"DEFAULT_TENANT"`
+2. **Entidades con Contrato `ITenantEntity`**:
+   - `ExecutionEntity`: Corridas E2E y estados de conciliación bancaria.
+   - `InconsistencyEntity`: Registro detallado de discrepancias monetarias y valores JSON (Expected vs Actual).
+   - `ScorecardMetricsEntity`: Consolidado de métricas de calidad y umbrales (99.5%).
+3. **Global Query Filters Dinámicos (`AppDbContext`)**:
+   - En `OnModelCreating`, registra automáticamente `HasQueryFilter(e => e.TenantId == CurrentTenantId)` en todas las entidades `ITenantEntity`. Ninguna consulta LINQ puede acceder a datos de otro tenant accidentalmente.
+4. **Asignación Automática en Escrituras**:
+   - `SaveChangesAsync` inyecta automáticamente el `TenantId` activo en cualquier entidad agregada (`EntityState.Added`).
+5. **Azure SQL & Fallback In-Memory**:
+   - Soporta **Azure SQL Database** mediante la cadena de conexión `ConnectionStrings:AzureSql` con reintentos exponenciales ante fallas transitorias (`EnableRetryOnFailure`). Si no se suministra cadena, conmuta a base de datos en memoria para pruebas ágiles.
+
+---
+
 ## 📋 Endpoints de la API Backend
 
 | Método | Endpoint | Código HTTP | Descripción |
@@ -81,12 +105,17 @@ Plataforma unificada para la orquestación, certificación y triaje de pruebas E
 | `POST` | `/api/v1/orchestration/validate-schema` | `200 OK` | Valida un JSON de suite contra `schema-v1.1.json` devolviendo `isValid` y `validationErrors`. |
 | `POST` | `/api/v1/orchestration/executions/start` | `202 Accepted` / `400 Bad Request` | Encola la ejecución de una suite tras validar su schema y retorna el `executionId`. |
 | `WS` | `/hubs/telemetry` | `101 Switching Protocols` | Conexión WebSocket para telemetría en tiempo real. |
+| `GET` | `/api/v1/scorecarddata/metrics` | `200 OK` | Métricas del Scorecard filtradas automáticamente por el `TenantId` activo. |
+| `GET` | `/api/v1/scorecarddata/inconsistencies` | `200 OK` | Lista de discrepancias e inconsistencias del tenant actual. |
+| `GET` | `/api/v1/scorecarddata/executions` | `200 OK` | Historial de ejecuciones E2E del tenant actual. |
+| `GET` | `/api/v1/scorecarddata/tenant-info` | `200 OK` | Diagnóstico del Tenant resuelto y su origen (Header/Query/Default). |
 
 ---
 
 ## 🔒 Auditoría de Seguridad y Buenas Prácticas
 
 - **Cero Credenciales en Código**: No existen contraseñas, tokens o cadenas de conexión en el repositorio.
+- **Aislamiento Multitenant Robusto**: Las consultas a base de datos están protegidas en el núcleo de EF Core por Global Filters.
 - **Contenedor no privilegiado**: `Dockerfile` configurado con usuario `appuser` para **Azure Container Apps**.
 - **Gestión de Secretos**: Variables de entorno e integración con **Azure Key Vault**.
 - **Protección Git**: `.gitignore` auditado que excluye `node_modules`, binarios compilados, secretos y temporales.
