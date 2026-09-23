@@ -94,5 +94,6 @@ $mitester-theme: mat.m2-define-light-theme((
   density: 0,
 ));
 
-// Aplicar tema base
+// Aplicar estilos estructurales base y tema de componentes
+@include mat.core();
 @include mat.all-component-themes($mitester-theme);

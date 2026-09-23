@@ -11,11 +11,13 @@
     "environment": {
       "type": "string",
       "enum": ["DEV", "QA_AZURE", "STAGING_ONPREM", "PROD"],
+      "default": "QA_AZURE",
       "ui:widget": "select"
     },
     "environmentRef": {
       "type": "string",
-      "ui:placeholder": "Ej: kv-bpp-ktx-qa",
+      "default": "QA_Oracle",
+      "ui:placeholder": "Ej: kv-bpp-ktx-qa o QA_Oracle",
       "description": "Referencia segura al gestor de secretos (Key Vault) para las cadenas de conexión."
     },
     "application": {

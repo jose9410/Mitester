@@ -152,12 +152,31 @@ export class DynamicFormGeneratorService {
 
     const options = enumValues?.map((v) => ({ value: v, label: v }));
 
+    // Determinar valor por defecto con prioridad: prop['default'] -> defaults estándar de la plataforma
+    let defaultValue = prop['default'];
+    if (defaultValue === undefined || defaultValue === null || defaultValue === '') {
+      switch (key) {
+        case 'environment':
+          defaultValue = 'QA_AZURE';
+          break;
+        case 'environmentRef':
+          defaultValue = 'QA_Oracle';
+          break;
+        case 'tenant':
+          defaultValue = 'BPP KTX SAAS';
+          break;
+        case 'application':
+          defaultValue = 'Koncilia';
+          break;
+      }
+    }
+
     return {
       key,
       label:        this.humanize(key),
       widget:       uiWidget,
       required:     isRequired,
-      defaultValue: prop['default'],
+      defaultValue,
       options,
       placeholder:  prop['ui:placeholder'] as string | undefined,
       hint:         prop['description'] as string | undefined,

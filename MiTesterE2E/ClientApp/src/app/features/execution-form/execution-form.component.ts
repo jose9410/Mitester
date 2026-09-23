@@ -33,10 +33,10 @@ const SUITE_SCHEMA: Record<string, unknown> = {
   type: 'object',
   required: ['tenant', 'environment', 'application', 'processes'],
   properties: {
-    tenant:       { type: 'string', description: 'Identificador del cliente (ej. BPP KTX SAAS).' },
-    environment:  { type: 'string', enum: ['DEV', 'QA_AZURE', 'STAGING_ONPREM', 'PROD'], 'ui:widget': 'select' },
-    environmentRef: { type: 'string', 'ui:placeholder': 'Ej: kv-bpp-ktx-qa', description: 'Referencia segura al gestor de secretos (Key Vault) para las cadenas de conexión.' },
-    application:  { type: 'string', description: 'Módulo bajo certificación (ej. Koncilia, GouPayments).' },
+    tenant:       { type: 'string', default: 'BPP KTX SAAS', description: 'Identificador del cliente (ej. BPP KTX SAAS).' },
+    environment:  { type: 'string', enum: ['DEV', 'QA_AZURE', 'STAGING_ONPREM', 'PROD'], default: 'QA_AZURE', 'ui:widget': 'select' },
+    environmentRef: { type: 'string', default: 'QA_Oracle', 'ui:placeholder': 'Ej: kv-bpp-ktx-qa o QA_Oracle', description: 'Referencia segura al gestor de secretos (Key Vault) para las cadenas de conexión.' },
+    application:  { type: 'string', default: 'Koncilia', description: 'Módulo bajo certificación (ej. Koncilia, GouPayments).' },
     processes: {
       type: 'array',
       items: {
